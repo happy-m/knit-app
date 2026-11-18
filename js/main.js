@@ -339,9 +339,9 @@ async function viewCal(id, stepStr) {
 
 async function calArea(part, proj, doc, top, save) {
   app.innerHTML = `${top}
-    <p class="lead">이 파트의 차트만 <b>사각형으로 감싸주세요.</b> 옆과 위아래의 단·코 번호 칸까지 포함해야 다음 단계에서 찍을 수 있습니다.</p>
+    <p class="lead">이 파트의 차트 <b>하나만</b> 사각형으로 감싸주세요. 옆의 단 번호 칸과 위나 아래의 코 번호 칸까지 포함해야 합니다.</p>
     <div class="pv-box" id="pv"></div>
-    <p class="hint pad">손가락으로 끌어서 그리고, 모서리를 끌어 크기를 고칩니다. 한 페이지에 차트가 여러 개면 파트마다 따로 지정합니다.</p>
+    <p class="hint pad">손가락으로 끌어서 그리고, 모서리를 끌어 크기를 고칩니다. <b>위아래나 좌우로 떨어진 차트는 한 파트에 묶지 마세요.</b> 사이의 빈 공간 때문에 단 위치가 어긋납니다. 차트마다 파트를 따로 만드세요.</p>
     <div class="footer"><button type="button" class="btn" id="pg">페이지 바꾸기 (${part.page}쪽)</button>
       <button type="button" class="btn primary" id="next" ${part.cal.area ? '' : 'disabled'}>다음: 단 번호</button></div>`;
   const box = app.querySelector('#pv');
@@ -401,6 +401,13 @@ async function calArea(part, proj, doc, top, save) {
     anchor = null;
     if (!A || A.w * W < 16 || A.h * H < 16) { A = part.cal.area ? { ...part.cal.area } : null; draw(); return; }
     part.cal.area = A;
+    // 새 영역 밖으로 나간 기준점은 지운다 (예전 영역에서 찍은 점이 남아 계산을 틀리게 하지 않도록)
+    const inside = (p) => p && typeof p.x === 'number' && p.x >= A.x - 0.002 && p.x <= A.x + A.w + 0.002 && p.y >= A.y - 0.002 && p.y <= A.y + A.h + 0.002;
+    for (const f of ['rows', 'cols']) {
+      const pr = part.cal[f];
+      if (!pr) continue;
+      for (const k of ['a', 'b']) if (pr[k] && !inside(pr[k])) pr[k] = {};
+    }
     await save();
     nextBtn.disabled = false;
   };
@@ -424,11 +431,12 @@ async function calPoints(part, doc, top, save, step) {
   const pair = part.cal[field] || { a: {}, b: {} };
   part.cal[field] = pair;
   let active = pair.a[key] === undefined ? 'a' : pair.b[key] === undefined ? 'b' : null;
-  let grid = false;
+  let grid = validPair(pair, key);
   app.innerHTML = `${top}
     <p class="lead">${isRow
       ? '차트 옆에 인쇄된 <b>단 번호 칸 두 개</b>를 찍고 번호를 적어주세요. 멀리 떨어진 두 칸일수록 정확합니다.'
-      : '차트 위나 아래에 인쇄된 <b>코 번호 칸 두 개</b>를 찍고 번호를 적어주세요. 양 끝 칸이 가장 정확합니다.'}</p>
+      : '차트 위나 아래에 인쇄된 <b>코 번호 칸 두 개</b>를 찍고 번호를 적어주세요. 양 끝 칸이 가장 정확합니다.'}
+      다시 찍으려면 그 자리를 탭하면 가까운 점이 옮겨집니다. 빨간 격자선이 칸과 맞는지 확인하세요.</p>
     <div class="cal-chart" id="chart"></div>
     <div class="pin-row">
       ${['a', 'b'].map((k) => `<div class="pin-col">
@@ -437,7 +445,7 @@ async function calPoints(part, doc, top, save, step) {
       </div>`).join('')}
     </div>
     <div class="result" id="result"></div>
-    <div class="footer"><button type="button" class="btn" id="grid" aria-pressed="false">격자 겹쳐 보기</button>
+    <div class="footer"><button type="button" class="btn" id="grid" aria-pressed="${grid}">격자 겹쳐 보기</button>
       <button type="button" class="btn primary" id="next">${isRow ? '다음: 코 번호' : '다음: 뜨는 방식'}</button></div>`;
   const resEl = app.querySelector('#result');
   const nextBtn = app.querySelector('#next');
@@ -498,11 +506,20 @@ async function calPoints(part, doc, top, save, step) {
   const cv = new ChartView(app.querySelector('#chart'), {
     doc, pageNum: part.page, area: part.cal.area, decorate,
     onTap: async (nx, ny) => {
-      const k = active || 'a';
+      let k = active;
+      if (!k) {
+        // 두 점이 다 찍혀 있으면 더 가까운 점을 옮긴다
+        const v = key === 'y' ? ny : nx;
+        k = Math.abs(pair.a[key] - v) <= Math.abs(pair.b[key] - v) ? 'a' : 'b';
+      }
       pair[k].x = nx;
       pair[k].y = ny;
       const other = k === 'a' ? 'b' : 'a';
       active = pair[other][key] === undefined ? other : null;
+      if (validPair(pair, key) && !grid) {
+        grid = true;
+        app.querySelector('#grid').setAttribute('aria-pressed', 'true');
+      }
       await save();
       refresh();
       if (pair[k].n === undefined || pair[k].n === null) app.querySelector(`#n-${k}`).focus({ preventScroll: true });
