@@ -341,7 +341,7 @@ async function calArea(part, proj, doc, top, save) {
   app.innerHTML = `${top}
     <p class="lead">이 파트의 차트 <b>하나만</b> 사각형으로 감싸주세요. 옆의 단 번호 칸과 위나 아래의 코 번호 칸까지 포함해야 합니다.</p>
     <div class="pv-box" id="pv"></div>
-    <p class="hint pad">손가락으로 끌어서 그리고, 모서리를 끌어 크기를 고칩니다. <b>위아래나 좌우로 떨어진 차트는 한 파트에 묶지 마세요.</b> 사이의 빈 공간 때문에 단 위치가 어긋납니다. 차트마다 파트를 따로 만드세요.</p>
+    <p class="hint pad">손가락으로 끌어서 그리고, 모서리를 끌어 크기를 고칩니다. 번호 칸이 글자로 읽히는 도안이면 위아래로 떨어진 차트도 한 파트로 묶을 수 있습니다. 사이의 빈 공간은 번호 칸 위치로 맞춥니다.</p>
     <div class="footer"><button type="button" class="btn" id="pg">페이지 바꾸기 (${part.page}쪽)</button>
       <button type="button" class="btn primary" id="next" ${part.cal.area ? '' : 'disabled'}>다음: 단 번호</button></div>`;
   const box = app.querySelector('#pv');
@@ -458,10 +458,11 @@ async function calPoints(part, doc, top, save, step) {
       if (!validPair(pr, k)) return;
       const ax = axis(pr, k);
       if (ax.hi - ax.lo > 600) return;
-      for (let n = ax.lo; n <= ax.hi + 1; n++) {
-        const val = ax.at(n) - (ax.at(ax.lo + 1) - ax.at(ax.lo)) / 2;
-        if (k === 'y') s += `<i class="gl ${cls}" style="left:0;top:${v.n2p(0, val)[1]}px;width:${w}px;height:1px"></i>`;
-        else s += `<i class="gl ${cls}" style="top:0;left:${v.n2p(val, 0)[0]}px;height:${h}px;width:1px"></i>`;
+      for (let n = ax.lo; n <= ax.hi; n++) {
+        for (const val of [ax.at(n) - ax.pitchAt(n) / 2, ax.at(n) + ax.pitchAt(n) / 2]) {
+          if (k === 'y') s += `<i class="gl ${cls}" style="left:0;top:${v.n2p(0, val)[1]}px;width:${w}px;height:1px"></i>`;
+          else s += `<i class="gl ${cls}" style="top:0;left:${v.n2p(val, 0)[0]}px;height:${h}px;width:1px"></i>`;
+        }
       }
     };
     if (grid) {
@@ -492,7 +493,10 @@ async function calPoints(part, doc, top, save, step) {
     nextBtn.disabled = !ok;
     if (ok) {
       const ax = axis(pair, key);
-      resEl.innerHTML = `${icon.check}<span>${ax.lo}${unit}부터 ${ax.hi}${unit}까지 <b>${ax.hi - ax.lo + 1}${isRow ? '단' : '칸'}</b>으로 계산했습니다</span>`;
+      const total = ax.hi - ax.lo + 1;
+      const read = pair.table ? pair.table.length : 0;
+      resEl.innerHTML = `${icon.check}<span>${ax.lo}${unit}부터 ${ax.hi}${unit}까지 <b>${total}${isRow ? '단' : '칸'}</b>` +
+        (read ? ` · 번호 칸 ${read}개를 읽어 ${isRow ? '단' : '칸'}마다 위치를 맞췄습니다${read < total ? ' (나머지는 사이를 나눠 계산)' : ''}` : '으로 계산했습니다') + '</span>';
       resEl.className = 'result ok';
     } else {
       const missing = ['a', 'b'].filter((k) => pair[k][key] === undefined).map((k) => k.toUpperCase());
@@ -521,6 +525,9 @@ async function calPoints(part, doc, top, save, step) {
         app.querySelector(`#n-${k}`).value = String(hit.n);
       }
       pair[k].auto = !!hit;
+      pair[k].hw = hit ? hit.hw : undefined;
+      pair[k].hh = hit ? hit.hh : undefined;
+      pair.table = buildTable(labels, pair, key);
       const other = k === 'a' ? 'b' : 'a';
       active = pair[other][key] === undefined ? other : null;
       if (validPair(pair, key) && !grid) {
@@ -544,6 +551,8 @@ async function calPoints(part, doc, top, save, step) {
     app.querySelector(`#n-${k}`).addEventListener('input', async (e) => {
       const v = parseInt(e.target.value.replace(/\D/g, ''), 10);
       pair[k].n = Number.isFinite(v) ? v : null;
+      pair[k].auto = false;
+      pair.table = null;
       await save();
       refresh();
     });
@@ -632,6 +641,44 @@ async function readNumberLabels(page, area) {
   }
 }
 
+// 찍은 두 번호 칸과 같은 줄(단: 같은 세로줄, 코: 같은 가로줄)에 있는 번호를 모두 모아 번호별 위치표를 만든다
+function buildTable(labels, pair, key) {
+  const { a, b } = pair;
+  if (!labels || !a.auto || !b.auto || !validPair(pair, key)) return null;
+  const cross = key === 'y' ? 'x' : 'y';
+  const lo = Math.min(a.n, b.n);
+  const hi = Math.max(a.n, b.n);
+  const near = (l) => [a, b].some((an) => {
+    const tol = 3 * Math.max(cross === 'x' ? an.hw || 0 : an.hh || 0, 0.004);
+    return Math.abs((cross === 'x' ? l.cx : l.cy) - an[cross]) < tol;
+  });
+  const lin = (n) => a[key] + ((n - a.n) * (b[key] - a[key])) / (b.n - a.n);
+  const byN = new Map();
+  for (const l of labels) {
+    if (l.n < lo || l.n > hi || !near(l)) continue;
+    const v = key === 'y' ? l.cy : l.cx;
+    if (!byN.has(l.n)) byN.set(l.n, []);
+    byN.get(l.n).push(v);
+  }
+  byN.set(a.n, [a[key]]);
+  byN.set(b.n, [b[key]]);
+  let rows = [...byN.entries()].map(([n, vs]) => {
+    vs.sort((p, q) => Math.abs(p - lin(n)) - Math.abs(q - lin(n)));
+    const v0 = vs[0];
+    const same = vs.filter((v) => Math.abs(v - v0) < 0.004);
+    return [n, same.reduce((s, v) => s + v, 0) / same.length];
+  }).sort((p, q) => p[0] - q[0]);
+  // 번호 순서와 위치 순서가 어긋나는 값은 버린다
+  const dir = Math.sign((b[key] - a[key]) / (b.n - a.n));
+  const kept = [];
+  for (const r of rows) {
+    if (!kept.length || Math.sign(r[1] - kept[kept.length - 1][1]) === dir) kept.push(r);
+  }
+  rows = kept;
+  if (rows.length < 3 || rows[0][0] !== lo || rows[rows.length - 1][0] !== hi) return null;
+  return rows.map(([n, v]) => [n, Math.round(v * 1e6) / 1e6]);
+}
+
 function nearestLabel(labels, nx, ny) {
   let best = null;
   let bd = Infinity;
@@ -693,7 +740,7 @@ async function viewKnit(id) {
   const decorate = (v) => {
     const [w] = v.size();
     const pr = p();
-    const edge = (r) => [R.at(r) - R.pitch / 2, R.at(r) + R.pitch / 2];
+    const edge = (r) => [R.at(r) - R.pitchAt(r) / 2, R.at(r) + R.pitchAt(r) / 2];
     let h = '';
     const lastDone = pr.done ? R.hi : pr.row - 1;
     if (lastDone >= R.lo) {
@@ -710,8 +757,8 @@ async function viewKnit(id) {
       h += `<i class="band" style="left:0;top:${y1}px;width:${w}px;height:${y2 - y1}px"></i>`;
       if (pr.mark !== null && pr.mark !== undefined) {
         const cx = C.at(pr.mark);
-        const x1 = v.n2p(cx - C.pitch / 2, 0)[0];
-        const x2 = v.n2p(cx + C.pitch / 2, 0)[0];
+        const x1 = v.n2p(cx - C.pitchAt(pr.mark) / 2, 0)[0];
+        const x2 = v.n2p(cx + C.pitchAt(pr.mark) / 2, 0)[0];
         h += `<i class="mark" style="left:${x1}px;top:${y1}px;width:${x2 - x1}px;height:${y2 - y1}px"></i>`;
         h += `<span class="mark-tag" style="left:${(x1 + x2) / 2}px;top:${y1}px">${pr.mark}번 칸</span>`;
       }
