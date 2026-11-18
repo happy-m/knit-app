@@ -1,6 +1,6 @@
 // 앱 파일을 폰에 저장해 두고 인터넷 없이도 열리게 한다.
 // 코드를 고친 뒤 올릴 때는 VERSION을 올린다.
-const VERSION = 'knit-v6';
+const VERSION = 'knit-v7';
 const ASSETS = [
   './', 'index.html', 'app.css', 'manifest.webmanifest',
   'js/main.js', 'js/db.js', 'js/pdf.js', 'js/chartview.js', 'js/ui.js', 'js/knitting.js',
@@ -9,7 +9,7 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {

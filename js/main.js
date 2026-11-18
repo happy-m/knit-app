@@ -7,6 +7,7 @@ import {
   repeatTotal, nextRow, prevRow, jumpTo, partStatus,
 } from './knitting.js';
 
+const APP_VERSION = 7;
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -103,7 +104,7 @@ async function viewHome() {
       ${cards.join('')}
       <label class="empty-card"><input type="file" accept="application/pdf,.pdf" hidden>
         <b>도안 PDF로 새 작품 만들기</b><span>파일 앱에서 PDF를 고르면 폰 안에 저장됩니다</span></label>
-      <p class="hint center">도안과 기록은 이 기기 안에만 저장됩니다.</p>
+      <p class="hint center">도안과 기록은 이 기기 안에만 저장됩니다. · 버전 ${APP_VERSION}</p>
     </div></div>`;
   app.querySelectorAll('input[type=file]').forEach((inp) =>
     inp.addEventListener('change', async () => {
@@ -342,6 +343,7 @@ async function calArea(part, proj, doc, top, save) {
     <p class="lead">차트 영역을 자동으로 잡아 둡니다. 원하는 차트만 쓰려면 모서리를 끌어 고치세요. <b>대충</b> 감싸도 바로 옆 번호 칸은 자동으로 들어갑니다.</p>
     <div class="pv-box" id="pv"></div>
     <p class="hint pad">손가락으로 끌어서 그리고, 모서리를 끌어 크기를 고칩니다. 번호 칸이 글자로 읽히는 도안이면 위아래로 떨어진 차트도 한 파트로 묶을 수 있습니다. 사이의 빈 공간은 번호 칸 위치로 맞춥니다.</p>
+    <button type="button" class="link-btn" id="autoarea">차트 영역 자동으로 다시 잡기</button>
     <div class="footer"><button type="button" class="btn" id="pg">페이지 바꾸기 (${part.page}쪽)</button>
       <button type="button" class="btn primary" id="next" ${part.cal.area ? '' : 'disabled'}>다음: 단 번호</button></div>`;
   const box = app.querySelector('#pv');
@@ -367,17 +369,24 @@ async function calArea(part, proj, doc, top, save) {
     await renderPage(doc, part.page, canvas, cssW);
     draw();
   };
-  if (!A) {
+  const applyProposal = async (manual) => {
     const prop = await proposeArea(doc, part.page);
-    if (prop) {
-      A = prop;
-      part.cal.area = A;
-      await save();
-      nextBtn.disabled = false;
-      draw();
-      toast('차트 영역을 자동으로 잡았습니다. 맞지 않으면 모서리를 끌어 고치세요.', { ms: 4500 });
+    if (!prop) {
+      if (manual) toast('이 페이지에서는 번호 칸을 찾지 못했습니다. 손가락으로 끌어 직접 감싸주세요.');
+      return;
     }
-  }
+    A = prop;
+    part.cal.area = A;
+    // 영역이 바뀌면 예전 기준점은 다시 잡도록 지운다
+    part.cal.rows = null;
+    part.cal.cols = null;
+    await save();
+    nextBtn.disabled = false;
+    draw();
+    toast('차트 영역을 자동으로 잡았습니다. 맞지 않으면 모서리를 끌어 고치세요.', { ms: 4500 });
+  };
+  if (!A) await applyProposal(false);
+  app.querySelector('#autoarea').addEventListener('click', () => applyProposal(true));
   const ro2 = new ResizeObserver(() => { clearTimeout(ro2.t); ro2.t = setTimeout(layout, 200); });
   ro2.observe(box);
   onCleanup(() => ro2.disconnect());
@@ -1122,7 +1131,13 @@ async function openDoc(doc) {
 
 // ---------- 시작 ----------
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  // 새 버전이 설치되면 바로 다시 불러와 새 화면을 보여준다
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hadController && !reloaded) { reloaded = true; location.reload(); }
+  });
+  navigator.serviceWorker.register('sw.js').then((r) => r.update()).catch(() => {});
 }
 navigator.storage?.persist?.().catch(() => {});
 route();
