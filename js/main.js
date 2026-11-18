@@ -8,7 +8,7 @@ import {
   repeatTotal, nextRow, prevRow, jumpTo, partStatus, isText,
 } from './knitting.js';
 
-const APP_VERSION = 15;
+const APP_VERSION = 16;
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -555,7 +555,7 @@ async function calPoints(part, doc, top, save, step) {
     <p class="lead">${isRow
       ? '<b>단 번호 칸</b>의 맨 아래와 맨 위를 기준으로 삼습니다.'
       : '<b>코 번호 칸</b>의 양 끝을 기준으로 삼습니다.'}
-      글자로 된 도안은 자동으로 잡아 둡니다. 빨간 선이 칸과 맞으면 다음으로, 조금 어긋나면 미세 조정을 쓰세요.</p>
+      글자로 된 도안은 자동으로 잡아 둡니다. 번호만 적어도 그 칸을 찾아가니, 꼭 찍지 않아도 됩니다.</p>
     <div class="cal-chart" id="chart"></div>
     <div class="tune" role="group" aria-label="격자 미세 조정">
       <span class="tune-l">미세 조정</span>
@@ -634,7 +634,7 @@ async function calPoints(part, doc, top, save, step) {
     } else {
       const missing = ['a', 'b'].filter((k) => pair[k][key] === undefined).map((k) => k.toUpperCase());
       resEl.textContent = missing.length
-        ? `${missing.join(', ')} 지점을 차트에서 찍어주세요. 확대하면 정확하게 찍을 수 있습니다.`
+        ? `${missing.join(', ')} 지점을 차트에서 찍거나, 아래 칸에 번호를 적어주세요.`
         : '두 지점의 번호를 서로 다르게 적어주세요.';
       resEl.className = 'result';
     }
@@ -658,6 +658,7 @@ async function calPoints(part, doc, top, save, step) {
         app.querySelector(`#n-${k}`).value = String(hit.n);
       }
       pair[k].auto = !!hit;
+      pair[k].est = false;
       pair[k].hw = hit ? hit.hw : undefined;
       pair[k].hh = hit ? hit.hh : undefined;
       pair.table = buildTable(labels, pair, key);
@@ -706,12 +707,62 @@ async function calPoints(part, doc, top, save, step) {
     if (!validPair(pair, key)) await runAuto();
   }
   app.querySelectorAll('[data-pin]').forEach((b) => b.addEventListener('click', () => { active = b.dataset.pin; refresh(); }));
+  // 번호만 적어도 위치를 정한다: PDF에 그 번호 글자가 있으면 그 칸에, 없으면 영역 끝에 맞춰 대략 잡는다
+  const placeByNumber = (k) => {
+    const n = pair[k].n;
+    if (!Number.isInteger(n)) return false;
+    const other = pair[k === 'a' ? 'b' : 'a'];
+    const cands = (labels || []).filter((l) => l.n === n);
+    if (cands.length) {
+      // 같은 번호가 여러 곳이면 다른 점과 같은 줄(단은 세로줄, 코는 가로줄)에 있는 것을 고른다
+      const perp = key === 'y' ? 'x' : 'y';
+      const ref = other[perp] ?? pair[k][perp];
+      const l = ref === undefined ? cands[0]
+        : cands.reduce((m, c) => (Math.abs(c['c' + perp] - ref) < Math.abs(m['c' + perp] - ref) ? c : m));
+      pair[k] = { x: l.cx, y: l.cy, n, auto: true, hw: l.hw, hh: l.hh };
+      pair.table = buildTable(labels, pair, key);
+      return 'label';
+    }
+    // 글자로 된 번호가 없는 도안: 직접 찍은 점이 없을 때만 영역 끝에 맞춰 추정한다
+    const est = (q) => q[key] === undefined || q.est;
+    if (!est(pair.a) || !est(pair.b) || !Number.isInteger(other.n) || other.n === n) return false;
+    const A = part.cal.area;
+    const lo = Math.min(pair.a.n, pair.b.n), hi = Math.max(pair.a.n, pair.b.n);
+    const cnt = hi - lo + 1;
+    for (const q of [pair.a, pair.b]) {
+      const t = (q.n - lo + 0.5) / cnt; // 0~1, 번호가 작은 쪽부터
+      // 단: 1단이 아래, 코: 1번 칸이 오른쪽 (일반적인 기호 도안)
+      if (key === 'y') { q.y = A.y + A.h * (1 - t); q.x = A.x + A.w - 0.01; }
+      else { q.x = A.x + A.w * (1 - t); q.y = A.y + A.h - 0.01; }
+      q.est = true;
+      q.auto = false;
+    }
+    pair.table = null;
+    return 'est';
+  };
+  const timers = {};
   for (const k of ['a', 'b']) {
     app.querySelector(`#n-${k}`).addEventListener('input', async (e) => {
       const v = parseInt(e.target.value.replace(/\D/g, ''), 10);
       pair[k].n = Number.isFinite(v) ? v : null;
       pair[k].auto = false;
       pair.table = null;
+      clearTimeout(timers[k]);
+      // 다 적을 때까지 잠깐 기다렸다가 자리를 찾는다
+      timers[k] = setTimeout(async () => {
+        const how = placeByNumber(k);
+        if (how) {
+          active = pair.a[key] === undefined ? 'a' : pair.b[key] === undefined ? 'b' : null;
+          if (validPair(pair, key)) {
+            grid = true;
+            app.querySelector('#grid').setAttribute('aria-pressed', 'true');
+          }
+          if (how === 'est') toast('차트 영역 끝에 맞춰 대략 잡았습니다. 빨간 선을 보고 미세 조정으로 맞춰주세요.', { ms: 4500 });
+        }
+        await save();
+        refresh();
+        if (how === 'label') cv.scrollTo(pair[k].x, pair[k].y, { x: 'center', yFrac: 0.4, smooth: true });
+      }, 600);
       await save();
       refresh();
     });

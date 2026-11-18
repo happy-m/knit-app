@@ -266,3 +266,4 @@ a { color: var(--ink); }
 .backup-card p { margin: 6px 0 12px; line-height: 1.5; }
 .backup-btns { display: flex; gap: 8px; }
 .backup-btns .btn { flex: 1; }
+[hidden] { display: none !important; }
