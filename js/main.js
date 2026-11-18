@@ -7,7 +7,7 @@ import {
   repeatTotal, nextRow, prevRow, jumpTo, partStatus,
 } from './knitting.js';
 
-const APP_VERSION = 8;
+const APP_VERSION = 9;
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -500,7 +500,7 @@ async function calPoints(part, doc, top, save, step) {
         }
       }
     };
-    if (grid) {
+    if (grid && !active) {
       lines(part.cal.rows, 'y', isRow ? '' : 'weak');
       if (!isRow) lines(part.cal.cols, 'x', '');
     }
@@ -508,10 +508,16 @@ async function calPoints(part, doc, top, save, step) {
       const p = pair[k];
       if (p[key] === undefined) continue;
       const [px, py] = v.n2p(p.x ?? 0, p.y ?? 0);
-      s += isRow
-        ? `<i class="guide" style="left:0;top:${py}px;width:${w}px;height:2px"></i>`
-        : `<i class="guide" style="top:0;left:${px}px;height:${h}px;width:2px"></i>`;
-      s += `<span class="pin" style="left:${px}px;top:${py}px">${k.toUpperCase()}</span>`;
+      // 다시 찍을 점은 흐리게 해서 아래 칸이 보이게 한다
+      const ghost = active === k ? ' ghost' : '';
+      if (!ghost) {
+        s += isRow
+          ? `<i class="guide" style="left:0;top:${py}px;width:${w}px;height:2px"></i>`
+          : `<i class="guide" style="top:0;left:${px}px;height:${h}px;width:2px"></i>`;
+      }
+      // 찍은 자리는 가운데가 빈 고리로, 글자 표시는 비켜서 그려 번호 칸을 가리지 않는다
+      s += `<span class="pin-ring${ghost}" style="left:${px}px;top:${py}px"></span>`;
+      s += `<span class="pin${ghost}" style="left:${px}px;top:${py}px">${k.toUpperCase()}</span>`;
     }
     return s;
   };

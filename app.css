@@ -165,9 +165,11 @@ a { color: var(--ink); }
 .gl { background: rgba(215, 38, 61, .7); }
 .gl.weak { background: rgba(15, 107, 99, .35); }
 .guide { background: rgba(215, 38, 61, .45); }
-.pin { width: 26px; height: 26px; border-radius: 13px; background: var(--mark); color: #fff; font-family: var(--mono); font-size: 13px;
-  font-weight: 700; display: flex !important; align-items: center; justify-content: center; transform: translate(-50%, -50%);
+.pin { width: 22px; height: 22px; border-radius: 11px; background: var(--mark); color: #fff; font-family: var(--mono); font-size: 12px;
+  font-weight: 700; display: flex !important; align-items: center; justify-content: center; transform: translate(10px, calc(-100% - 10px));
   box-shadow: 0 2px 6px rgba(28, 43, 42, .35); }
+.pin-ring { width: 16px; height: 16px; border-radius: 8px; border: 2px solid var(--mark); transform: translate(-50%, -50%); box-sizing: border-box; }
+.pin.ghost, .pin-ring.ghost { opacity: .25; }
 
 /* 뜨기 화면 */
 .knit { flex: 1; min-height: 0; display: flex; flex-direction: column; }
