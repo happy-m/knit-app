@@ -48,7 +48,7 @@ a { color: var(--ink); }
 .btn.dashed { border: 1.5px dashed var(--sub); background: transparent; min-height: 48px; font-size: 15px; }
 .btn:disabled { opacity: .35; cursor: default; }
 .btn[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
-.link-btn { min-height: 44px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 500; }
+.link-btn { border: 0; background: transparent; color: var(--ink); text-decoration: underline; margin: 0 auto; padding: 0 12px; min-height: 44px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 500; }
 .icon-btn { width: 44px; height: 44px; border: 0; background: transparent; display: inline-flex; align-items: center;
   justify-content: center; color: var(--ink); flex: none; border-radius: 10px; }
 

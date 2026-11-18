@@ -339,7 +339,7 @@ async function viewCal(id, stepStr) {
 
 async function calArea(part, proj, doc, top, save) {
   app.innerHTML = `${top}
-    <p class="lead">이 파트의 차트 <b>하나만</b> 사각형으로 감싸주세요. 옆의 단 번호 칸과 위나 아래의 코 번호 칸까지 포함해야 합니다.</p>
+    <p class="lead">이 파트의 차트를 <b>대충 사각형으로</b> 감싸주세요. 바로 옆의 번호 칸은 자동으로 포함됩니다.</p>
     <div class="pv-box" id="pv"></div>
     <p class="hint pad">손가락으로 끌어서 그리고, 모서리를 끌어 크기를 고칩니다. 번호 칸이 글자로 읽히는 도안이면 위아래로 떨어진 차트도 한 파트로 묶을 수 있습니다. 사이의 빈 공간은 번호 칸 위치로 맞춥니다.</p>
     <div class="footer"><button type="button" class="btn" id="pg">페이지 바꾸기 (${part.page}쪽)</button>
@@ -400,6 +400,9 @@ async function calArea(part, proj, doc, top, save) {
     if (!anchor) return;
     anchor = null;
     if (!A || A.w * W < 16 || A.h * H < 16) { A = part.cal.area ? { ...part.cal.area } : null; draw(); return; }
+    // 사각형 바로 바깥에 번호 칸이 걸쳐 있으면 영역을 넓혀 포함시킨다 (대충 그려도 되도록)
+    A = await growToLabels(doc, part.page, A);
+    draw();
     part.cal.area = A;
     // 새 영역 밖으로 나간 기준점은 지운다 (예전 영역에서 찍은 점이 남아 계산을 틀리게 하지 않도록)
     const inside = (p) => p && typeof p.x === 'number' && p.x >= A.x - 0.002 && p.x <= A.x + A.w + 0.002 && p.y >= A.y - 0.002 && p.y <= A.y + A.h + 0.002;
@@ -434,9 +437,9 @@ async function calPoints(part, doc, top, save, step) {
   let grid = validPair(pair, key);
   app.innerHTML = `${top}
     <p class="lead">${isRow
-      ? '차트 옆에 인쇄된 <b>단 번호 칸</b>을 맨 아래 하나, 맨 위 하나 찍어주세요.'
-      : '차트 위나 아래에 인쇄된 <b>코 번호 칸</b>을 양 끝에서 하나씩 찍어주세요.'}
-      번호는 자동으로 읽어 채웁니다. 다시 찍으려면 그 자리를 탭하세요.</p>
+      ? '<b>단 번호 칸</b>의 맨 아래와 맨 위를 기준으로 삼습니다.'
+      : '<b>코 번호 칸</b>의 양 끝을 기준으로 삼습니다.'}
+      글자로 된 도안은 자동으로 찾아 둡니다. 빨간 선이 칸과 맞으면 다음으로 넘어가세요. 틀리면 그 근처를 대충 탭해도 가까운 번호 칸에 맞춰집니다.</p>
     <div class="cal-chart" id="chart"></div>
     <div class="pin-row">
       ${['a', 'b'].map((k) => `<div class="pin-col">
@@ -445,6 +448,7 @@ async function calPoints(part, doc, top, save, step) {
       </div>`).join('')}
     </div>
     <div class="result" id="result"></div>
+    <button type="button" class="link-btn" id="auto" hidden>번호 칸 자동으로 다시 찾기</button>
     <div class="footer"><button type="button" class="btn" id="grid" aria-pressed="${grid}">격자 겹쳐 보기</button>
       <button type="button" class="btn primary" id="next">${isRow ? '다음: 코 번호' : '다음: 뜨는 방식'}</button></div>`;
   const resEl = app.querySelector('#result');
@@ -546,6 +550,32 @@ async function calPoints(part, doc, top, save, step) {
   onCleanup(() => { cv.destroy(); if (window.__cv === cv) window.__cv = null; });
   await cv.init();
   const labels = await readNumberLabels(cv.page, part.cal.area);
+  const autoBtn = app.querySelector('#auto');
+  const runAuto = async () => {
+    const found = autoDetect(labels, key);
+    if (!found) return false;
+    for (const [k, l] of [['a', found.lo], ['b', found.hi]]) {
+      pair[k] = { x: l.cx, y: l.cy, n: l.n, auto: true, hw: l.hw, hh: l.hh };
+      app.querySelector(`#n-${k}`).value = String(l.n);
+    }
+    pair.table = buildTable(labels, pair, key);
+    active = null;
+    grid = true;
+    app.querySelector('#grid').setAttribute('aria-pressed', 'true');
+    await save();
+    refresh();
+    const ax = axis(pair, key);
+    cv.scrollTo(pair.b.x, pair.b.y, { x: 'center', yFrac: 0.3 });
+    toast(`번호 칸을 자동으로 찾았습니다 (${ax.lo}~${ax.hi}). 빨간 선이 칸과 맞는지만 확인하세요.`, { ms: 4500 });
+    return true;
+  };
+  if (labels) {
+    autoBtn.hidden = false;
+    autoBtn.addEventListener('click', async () => {
+      if (!(await runAuto())) toast('번호 칸을 찾지 못했습니다. 직접 찍어주세요.');
+    });
+    if (!validPair(pair, key)) await runAuto();
+  }
   app.querySelectorAll('[data-pin]').forEach((b) => b.addEventListener('click', () => { active = b.dataset.pin; refresh(); }));
   for (const k of ['a', 'b']) {
     app.querySelector(`#n-${k}`).addEventListener('input', async (e) => {
@@ -617,7 +647,7 @@ async function calMode(part, proj, top, save) {
 }
 
 // PDF 글자 층에서 숫자만 모아 둔다 (영역 안쪽, 정규화 좌표)
-async function readNumberLabels(page, area) {
+async function readNumberLabels(page, area, margin = 0) {
   try {
     const vp = page.getViewport({ scale: 1 });
     const tc = await page.getTextContent();
@@ -632,7 +662,7 @@ async function readNumberLabels(page, area) {
       const [x2, y2] = vp.convertToViewportPoint(e + w, f + h);
       const cx = (x1 + x2) / 2 / vp.width;
       const cy = (y1 + y2) / 2 / vp.height;
-      if (cx < area.x || cx > area.x + area.w || cy < area.y || cy > area.y + area.h) continue;
+      if (cx < area.x - margin || cx > area.x + area.w + margin || cy < area.y - margin || cy > area.y + area.h + margin) continue;
       out.push({ n: parseInt(s, 10), cx, cy, hw: Math.abs(x2 - x1) / 2 / vp.width, hh: Math.abs(y2 - y1) / 2 / vp.height });
     }
     return out.length ? out : null;
@@ -679,6 +709,58 @@ function buildTable(labels, pair, key) {
   return rows.map(([n, v]) => [n, Math.round(v * 1e6) / 1e6]);
 }
 
+async function growToLabels(doc, pageNum, A) {
+  try {
+    const page = await doc.getPage(pageNum);
+    const near = await readNumberLabels(page, A, 0.035);
+    if (!near) return A;
+    let x1 = A.x, y1 = A.y, x2 = A.x + A.w, y2 = A.y + A.h;
+    for (const l of near) {
+      x1 = Math.min(x1, l.cx - l.hw * 2);
+      x2 = Math.max(x2, l.cx + l.hw * 2);
+      y1 = Math.min(y1, l.cy - l.hh * 2);
+      y2 = Math.max(y2, l.cy + l.hh * 2);
+    }
+    x1 = clamp(x1, 0, 1); y1 = clamp(y1, 0, 1); x2 = clamp(x2, 0, 1); y2 = clamp(y2, 0, 1);
+    return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+  } catch {
+    return A;
+  }
+}
+
+// 번호 칸이 한 줄로 이어진 곳(단: 세로줄, 코: 가로줄)을 찾아 가장 긴 연속 번호의 양 끝을 돌려준다
+function autoDetect(labels, key) {
+  if (!labels) return null;
+  const cross = key === 'y' ? 'cx' : 'cy';
+  const along = key === 'y' ? 'cy' : 'cx';
+  const size = key === 'y' ? 'hw' : 'hh';
+  const groups = [];
+  for (const l of [...labels].sort((p, q) => p[cross] - q[cross])) {
+    const g = groups[groups.length - 1];
+    if (g && Math.abs(l[cross] - g.c) < Math.max(l[size], 0.004) * 1.6) {
+      g.items.push(l);
+      g.c = (g.c * (g.items.length - 1) + l[cross]) / g.items.length;
+    } else groups.push({ c: l[cross], items: [l] });
+  }
+  let best = null;
+  for (const g of groups) {
+    const it = g.items.sort((p, q) => p[along] - q[along]);
+    let start = 0;
+    for (let i = 1; i <= it.length; i++) {
+      const ok = i < it.length && Math.abs(it[i].n - it[i - 1].n) === 1 &&
+        (i - start < 2 || Math.sign(it[i].n - it[i - 1].n) === Math.sign(it[start + 1].n - it[start].n));
+      if (!ok) {
+        const len = i - start;
+        if (len >= 3 && (!best || len > best.len)) best = { len, first: it[start], last: it[i - 1] };
+        start = i;
+      }
+    }
+  }
+  if (!best) return null;
+  const [lo, hi] = best.first.n < best.last.n ? [best.first, best.last] : [best.last, best.first];
+  return { lo, hi };
+}
+
 function nearestLabel(labels, nx, ny) {
   let best = null;
   let bd = Infinity;
@@ -687,7 +769,7 @@ function nearestLabel(labels, nx, ny) {
     const d = Math.hypot((nx - l.cx) / Math.max(l.hw, 0.004), (ny - l.cy) / Math.max(l.hh, 0.004));
     if (d < bd) { bd = d; best = l; }
   }
-  return bd <= 2.2 ? best : null;
+  return bd <= 4 ? best : null;
 }
 
 // ---------- 뜨기 화면 ----------
