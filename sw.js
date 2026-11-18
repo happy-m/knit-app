@@ -1,6 +1,6 @@
 // 앱 파일을 폰에 저장해 두고 인터넷 없이도 열리게 한다.
 // 코드를 고친 뒤 올릴 때는 VERSION을 올린다.
-const VERSION = 'knit-v7';
+const VERSION = 'knit-v8';
 const ASSETS = [
   './', 'index.html', 'app.css', 'manifest.webmanifest',
   'js/main.js', 'js/db.js', 'js/pdf.js', 'js/chartview.js', 'js/ui.js', 'js/knitting.js',

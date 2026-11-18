@@ -7,7 +7,7 @@ import {
   repeatTotal, nextRow, prevRow, jumpTo, partStatus,
 } from './knitting.js';
 
-const APP_VERSION = 7;
+const APP_VERSION = 8;
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -275,6 +275,7 @@ async function viewPartAdd(pid) {
     <div class="page"><div class="wrap">
       <div class="field"><label for="ptname">파트 이름</label><input id="ptname" class="input" autocomplete="off" placeholder="예: 뒷판"></div>
       <div class="label">차트가 있는 페이지를 고르세요</div>
+      <p class="hint">페이지를 탭하면 크게 볼 수 있습니다.</p>
       <div class="thumbs" id="thumbs">${Array.from({ length: doc.numPages }, (_, i) =>
         `<button type="button" class="thumb" data-p="${i + 1}" aria-pressed="false"><span class="thumb-img"><canvas></canvas></span><span class="num">${i + 1}쪽</span></button>`).join('')}</div>
     </div></div>
@@ -293,11 +294,15 @@ async function viewPartAdd(pid) {
   onCleanup(() => io.disconnect());
   app.querySelectorAll('.thumb').forEach((t) => {
     io.observe(t);
-    t.addEventListener('click', () => {
+    t.addEventListener('click', async () => {
+      const p = +t.dataset.p;
+      const ok = await previewPage(doc, p, '이 페이지로 고르기');
+      if (!ok) return;
       app.querySelectorAll('.thumb').forEach((x) => x.setAttribute('aria-pressed', 'false'));
       t.setAttribute('aria-pressed', 'true');
-      page = +t.dataset.p;
+      page = p;
       check();
+      if (!nameIn.value.trim()) nameIn.focus();
     });
   });
   nextBtn.addEventListener('click', async () => {
@@ -1089,6 +1094,24 @@ function keypad(R, current) {
     kgo.addEventListener('click', () => done(parseInt(val, 10)));
     document.getElementById('layer').appendChild(el);
     upd();
+  });
+}
+
+// 한 페이지를 크게 보기 (두 손가락이나 +/−로 확대). 고르면 true
+function previewPage(doc, pageNum, pickLabel) {
+  return new Promise((resolve) => {
+    const el = document.createElement('div');
+    el.className = 'docv';
+    el.innerHTML = `<div class="docv-top"><b>${pageNum}쪽</b><span class="k-spacer"></span>
+      <button type="button" class="icon-btn" data-x aria-label="닫기">${icon.close}</button></div>
+      <div class="pv-full" id="pvfull"></div>
+      <div class="footer"><button type="button" class="btn" data-x>닫기</button><button type="button" class="btn primary" data-pick>${esc(pickLabel)}</button></div>`;
+    document.getElementById('layer').appendChild(el);
+    const cv = new ChartView(el.querySelector('#pvfull'), { doc, pageNum, area: { x: 0, y: 0, w: 1, h: 1 }, maxZoom: 8 });
+    cv.init().catch(() => {});
+    const done = (v) => { cv.destroy(); el.remove(); resolve(v); };
+    el.querySelectorAll('[data-x]').forEach((b) => b.addEventListener('click', () => done(false)));
+    el.querySelector('[data-pick]').addEventListener('click', () => done(true));
   });
 }
 
