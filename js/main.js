@@ -339,7 +339,7 @@ async function viewCal(id, stepStr) {
 
 async function calArea(part, proj, doc, top, save) {
   app.innerHTML = `${top}
-    <p class="lead">이 파트의 차트를 <b>대충 사각형으로</b> 감싸주세요. 바로 옆의 번호 칸은 자동으로 포함됩니다.</p>
+    <p class="lead">차트 영역을 자동으로 잡아 둡니다. 원하는 차트만 쓰려면 모서리를 끌어 고치세요. <b>대충</b> 감싸도 바로 옆 번호 칸은 자동으로 들어갑니다.</p>
     <div class="pv-box" id="pv"></div>
     <p class="hint pad">손가락으로 끌어서 그리고, 모서리를 끌어 크기를 고칩니다. 번호 칸이 글자로 읽히는 도안이면 위아래로 떨어진 차트도 한 파트로 묶을 수 있습니다. 사이의 빈 공간은 번호 칸 위치로 맞춥니다.</p>
     <div class="footer"><button type="button" class="btn" id="pg">페이지 바꾸기 (${part.page}쪽)</button>
@@ -367,7 +367,17 @@ async function calArea(part, proj, doc, top, save) {
     await renderPage(doc, part.page, canvas, cssW);
     draw();
   };
-  await layout();
+  if (!A) {
+    const prop = await proposeArea(doc, part.page);
+    if (prop) {
+      A = prop;
+      part.cal.area = A;
+      await save();
+      nextBtn.disabled = false;
+      draw();
+      toast('차트 영역을 자동으로 잡았습니다. 맞지 않으면 모서리를 끌어 고치세요.', { ms: 4500 });
+    }
+  }
   const ro2 = new ResizeObserver(() => { clearTimeout(ro2.t); ro2.t = setTimeout(layout, 200); });
   ro2.observe(box);
   onCleanup(() => ro2.disconnect());
@@ -439,8 +449,15 @@ async function calPoints(part, doc, top, save, step) {
     <p class="lead">${isRow
       ? '<b>단 번호 칸</b>의 맨 아래와 맨 위를 기준으로 삼습니다.'
       : '<b>코 번호 칸</b>의 양 끝을 기준으로 삼습니다.'}
-      글자로 된 도안은 자동으로 찾아 둡니다. 빨간 선이 칸과 맞으면 다음으로 넘어가세요. 틀리면 그 근처를 대충 탭해도 가까운 번호 칸에 맞춰집니다.</p>
+      글자로 된 도안은 자동으로 잡아 둡니다. 빨간 선이 칸과 맞으면 다음으로, 조금 어긋나면 미세 조정을 쓰세요.</p>
     <div class="cal-chart" id="chart"></div>
+    <div class="tune" role="group" aria-label="격자 미세 조정">
+      <span class="tune-l">미세 조정</span>
+      <button type="button" class="btn" data-tune="shift-1" aria-label="${isRow ? '격자를 위로' : '격자를 왼쪽으로'}">${isRow ? '▲' : '◀'}</button>
+      <button type="button" class="btn" data-tune="shift1" aria-label="${isRow ? '격자를 아래로' : '격자를 오른쪽으로'}">${isRow ? '▼' : '▶'}</button>
+      <button type="button" class="btn" data-tune="scale-1">간격 −</button>
+      <button type="button" class="btn" data-tune="scale1">간격 +</button>
+    </div>
     <div class="pin-row">
       ${['a', 'b'].map((k) => `<div class="pin-col">
         <button type="button" class="pin-btn" data-pin="${k}"></button>
@@ -587,6 +604,28 @@ async function calPoints(part, doc, top, save, step) {
       refresh();
     });
   }
+  // 미세 조정: 격자 전체를 조금 옮기거나 간격을 조금 넓히고 좁힌다 (한 번에 칸 크기의 1/5)
+  app.querySelectorAll('[data-tune]').forEach((bt) => bt.addEventListener('click', async () => {
+    if (!validPair(pair, key)) { toast('먼저 두 지점을 정해주세요'); return; }
+    const ax = axis(pair, key);
+    const d = ax.pitch / 5;
+    const t = bt.dataset.tune;
+    const map = t.startsWith('shift')
+      ? (v) => v + d * (t === 'shift1' ? 1 : -1)
+      : (() => {
+        const span = Math.abs(pair.b[key] - pair.a[key]) || 1;
+        const s = 1 + (d / span) * (t === 'scale1' ? 1 : -1);
+        const o = pair.a[key];
+        return (v) => o + (v - o) * s;
+      })();
+    pair.a[key] = map(pair.a[key]);
+    pair.b[key] = map(pair.b[key]);
+    if (pair.table) pair.table = pair.table.map(([n, v]) => [n, map(v)]);
+    grid = true;
+    app.querySelector('#grid').setAttribute('aria-pressed', 'true');
+    await save();
+    refresh();
+  }));
   app.querySelector('#grid').addEventListener('click', (e) => {
     grid = !grid;
     e.currentTarget.setAttribute('aria-pressed', String(grid));
@@ -751,14 +790,38 @@ function autoDetect(labels, key) {
         (i - start < 2 || Math.sign(it[i].n - it[i - 1].n) === Math.sign(it[start + 1].n - it[start].n));
       if (!ok) {
         const len = i - start;
-        if (len >= 3 && (!best || len > best.len)) best = { len, first: it[start], last: it[i - 1] };
+        if (len >= 3 && (!best || len > best.len)) best = { len, first: it[start], last: it[i - 1], items: it.slice(start, i) };
         start = i;
       }
     }
   }
   if (!best) return null;
   const [lo, hi] = best.first.n < best.last.n ? [best.first, best.last] : [best.last, best.first];
-  return { lo, hi };
+  return { lo, hi, items: best.items };
+}
+
+// 페이지에서 단 번호 줄과 코 번호 줄을 찾아, 둘을 감싸는 영역을 제안한다
+async function proposeArea(doc, pageNum) {
+  try {
+    const page = await doc.getPage(pageNum);
+    const labels = await readNumberLabels(page, { x: 0, y: 0, w: 1, h: 1 });
+    if (!labels) return null;
+    const r = autoDetect(labels, 'y');
+    const c = autoDetect(labels, 'x');
+    const items = [...(r ? r.items : []), ...(c ? c.items : [])];
+    if (!r || items.length < 6) return null;
+    let x1 = 1, y1 = 1, x2 = 0, y2 = 0;
+    for (const l of items) {
+      x1 = Math.min(x1, l.cx - l.hw * 2);
+      x2 = Math.max(x2, l.cx + l.hw * 2);
+      y1 = Math.min(y1, l.cy - l.hh * 2);
+      y2 = Math.max(y2, l.cy + l.hh * 2);
+    }
+    if (x2 - x1 < 0.05 || y2 - y1 < 0.05) return null;
+    return growToLabels(doc, pageNum, { x: x1, y: y1, w: x2 - x1, h: y2 - y1 });
+  } catch {
+    return null;
+  }
 }
 
 function nearestLabel(labels, nx, ny) {
