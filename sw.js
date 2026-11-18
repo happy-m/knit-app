@@ -1,9 +1,9 @@
 // 앱 파일을 폰에 저장해 두고 인터넷 없이도 열리게 한다.
 // 코드를 고친 뒤 올릴 때는 VERSION을 올린다.
-const VERSION = 'knit-v14';
+const VERSION = 'knit-v15';
 const ASSETS = [
   './', 'index.html', 'app.css', 'manifest.webmanifest',
-  'js/main.js', 'js/db.js', 'js/pdf.js', 'js/chartview.js', 'js/ui.js', 'js/knitting.js',
+  'js/main.js', 'js/db.js', 'js/pdf.js', 'js/chartview.js', 'js/ui.js', 'js/knitting.js', 'js/backup.js',
   'vendor/pdf.min.mjs', 'vendor/pdf.worker.min.mjs',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
 ];

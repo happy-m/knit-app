@@ -1,13 +1,14 @@
 import * as db from './db.js';
 import { loadPdf, openPdfData, renderPage, pageSize, forgetPdf } from './pdf.js';
 import { ChartView } from './chartview.js';
+import { buildBackup, readBackup, restoreBackup } from './backup.js';
 import { esc, icon, ro, eul, toast, dialog, ask, sheet, clearLayer } from './ui.js';
 import {
   calibrated, validPair, axis, rowsOf, colsOf, startProgress, knitIndex, isRightSide,
   repeatTotal, nextRow, prevRow, jumpTo, partStatus, isText,
 } from './knitting.js';
 
-const APP_VERSION = 14;
+const APP_VERSION = 15;
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -109,9 +110,24 @@ async function viewHome() {
       ${cards.join('')}
       <label class="empty-card"><input type="file" accept="application/pdf,.pdf" hidden>
         <b>도안 PDF로 새 작품 만들기</b><span>파일 앱에서 PDF를 고르면 폰 안에 저장됩니다</span></label>
-      <p class="hint center">도안과 기록은 이 기기 안에만 저장됩니다. · 버전 ${APP_VERSION}</p>
+      <div class="card backup-card">
+        <div class="label">백업</div>
+        <p class="small muted">도안과 기록은 이 앱 안에만 저장돼서, 홈 화면 아이콘을 지우면 함께 지워집니다. 백업 파일을 '파일' 앱이나 iCloud Drive에 저장해 두면 다시 설치한 뒤 되살릴 수 있어요.</p>
+        <div class="backup-btns">
+          <button type="button" class="btn" id="bk-out">백업 내보내기</button>
+          <label class="btn">백업 가져오기<input type="file" id="bk-in" hidden></label>
+        </div>
+      </div>
+      <p class="hint center">버전 ${APP_VERSION}</p>
     </div></div>`;
-  app.querySelectorAll('input[type=file]').forEach((inp) =>
+  app.querySelector('#bk-out').addEventListener('click', exportBackup);
+  const bkIn = app.querySelector('#bk-in');
+  bkIn.addEventListener('change', async () => {
+    const f = bkIn.files[0];
+    bkIn.value = '';
+    if (f) await importBackup(f);
+  });
+  app.querySelectorAll('input[type=file]:not(#bk-in)').forEach((inp) =>
     inp.addEventListener('change', async () => {
       const f = inp.files[0];
       inp.value = '';
@@ -129,6 +145,66 @@ async function viewHome() {
       go('#/new');
     })
   );
+}
+
+// ---------- 백업 ----------
+async function exportBackup() {
+  const projects = await db.all('projects');
+  if (!projects.length) return toast('아직 백업할 작품이 없습니다.');
+  let bk;
+  try {
+    bk = await buildBackup();
+  } catch {
+    return toast('백업 파일을 만들지 못했습니다.');
+  }
+  const mb = (bk.blob.size / 1048576).toFixed(1);
+  const ok = await dialog({
+    title: '백업 파일이 준비됐어요',
+    body: `작품 ${bk.count}개 · ${mb}MB<br>다음 화면에서 <b>'파일에 저장'</b>을 골라 iCloud Drive나 '나의 iPhone'에 저장하세요.`,
+    buttons: [{ label: '취소', value: false }, { label: '저장하기', value: true, primary: true }],
+  });
+  if (!ok) return;
+  const file = new File([bk.blob], bk.name, { type: 'application/octet-stream' });
+  if (navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file] });
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+    }
+  }
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = bk.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+async function importBackup(file) {
+  let bk;
+  try {
+    bk = await readBackup(file);
+  } catch {
+    return toast('백업 파일이 아니거나 손상된 파일입니다.');
+  }
+  const when = new Date(bk.meta.created);
+  const ok = await dialog({
+    title: '백업을 가져올까요?',
+    body: `${when.getFullYear()}.${when.getMonth() + 1}.${when.getDate()}에 만든 백업 · 작품 ${bk.meta.projects.length}개<br>같은 작품이 이미 있으면 백업 내용으로 바뀝니다. 다른 작품은 그대로 둡니다.`,
+    buttons: [{ label: '취소', value: false }, { label: '가져오기', value: true, primary: true }],
+  });
+  if (!ok) return;
+  try {
+    const ids = await restoreBackup(bk);
+    ids.forEach((id) => forgetPdf(id));
+  } catch {
+    return toast('가져오는 중 문제가 생겼습니다. 저장공간을 확인해 주세요.');
+  }
+  toast(`작품 ${bk.meta.projects.length}개를 가져왔습니다.`);
+  route();
 }
 
 // ---------- 등록 1. 새 작품 ----------
@@ -1462,3 +1538,4 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 }
 navigator.storage?.persist?.().catch(() => {});
 route();
+navigator.storage?.persist?.().catch(() => {});
