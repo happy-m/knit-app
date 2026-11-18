@@ -434,9 +434,9 @@ async function calPoints(part, doc, top, save, step) {
   let grid = validPair(pair, key);
   app.innerHTML = `${top}
     <p class="lead">${isRow
-      ? '차트 옆에 인쇄된 <b>단 번호 칸 두 개</b>를 찍고 번호를 적어주세요. 멀리 떨어진 두 칸일수록 정확합니다.'
-      : '차트 위나 아래에 인쇄된 <b>코 번호 칸 두 개</b>를 찍고 번호를 적어주세요. 양 끝 칸이 가장 정확합니다.'}
-      다시 찍으려면 그 자리를 탭하면 가까운 점이 옮겨집니다. 빨간 격자선이 칸과 맞는지 확인하세요.</p>
+      ? '차트 옆에 인쇄된 <b>단 번호 칸</b>을 맨 아래 하나, 맨 위 하나 찍어주세요.'
+      : '차트 위나 아래에 인쇄된 <b>코 번호 칸</b>을 양 끝에서 하나씩 찍어주세요.'}
+      번호는 자동으로 읽어 채웁니다. 다시 찍으려면 그 자리를 탭하세요.</p>
     <div class="cal-chart" id="chart"></div>
     <div class="pin-row">
       ${['a', 'b'].map((k) => `<div class="pin-col">
@@ -512,8 +512,15 @@ async function calPoints(part, doc, top, save, step) {
         const v = key === 'y' ? ny : nx;
         k = Math.abs(pair.a[key] - v) <= Math.abs(pair.b[key] - v) ? 'a' : 'b';
       }
-      pair[k].x = nx;
-      pair[k].y = ny;
+      // PDF에 글자로 들어 있는 번호 칸을 찍었으면, 번호를 읽어 채우고 점을 칸 가운데에 맞춘다
+      const hit = labels ? nearestLabel(labels, nx, ny) : null;
+      pair[k].x = hit ? hit.cx : nx;
+      pair[k].y = hit ? hit.cy : ny;
+      if (hit) {
+        pair[k].n = hit.n;
+        app.querySelector(`#n-${k}`).value = String(hit.n);
+      }
+      pair[k].auto = !!hit;
       const other = k === 'a' ? 'b' : 'a';
       active = pair[other][key] === undefined ? other : null;
       if (validPair(pair, key) && !grid) {
@@ -522,12 +529,16 @@ async function calPoints(part, doc, top, save, step) {
       }
       await save();
       refresh();
-      if (pair[k].n === undefined || pair[k].n === null) app.querySelector(`#n-${k}`).focus({ preventScroll: true });
+      if (!hit) {
+        toast('번호를 읽지 못했습니다. 아래 칸에 번호를 직접 적어주세요.');
+        app.querySelector(`#n-${k}`).focus({ preventScroll: true });
+      }
     },
   });
   window.__cv = cv;
   onCleanup(() => { cv.destroy(); if (window.__cv === cv) window.__cv = null; });
   await cv.init();
+  const labels = await readNumberLabels(cv.page, part.cal.area);
   app.querySelectorAll('[data-pin]').forEach((b) => b.addEventListener('click', () => { active = b.dataset.pin; refresh(); }));
   for (const k of ['a', 'b']) {
     app.querySelector(`#n-${k}`).addEventListener('input', async (e) => {
@@ -594,6 +605,42 @@ async function calMode(part, proj, top, save) {
     app.querySelector('#start').addEventListener('click', () => finish(`#/k/${part.id}`));
   };
   render();
+}
+
+// PDF 글자 층에서 숫자만 모아 둔다 (영역 안쪽, 정규화 좌표)
+async function readNumberLabels(page, area) {
+  try {
+    const vp = page.getViewport({ scale: 1 });
+    const tc = await page.getTextContent();
+    const out = [];
+    for (const it of tc.items) {
+      const s = (it.str || '').trim();
+      if (!/^\d{1,3}$/.test(s)) continue;
+      const [a, b, , d, e, f] = it.transform;
+      const h = Math.hypot(b, d) || it.height || 0;
+      const w = it.width || h * 0.6 * s.length;
+      const [x1, y1] = vp.convertToViewportPoint(e, f);
+      const [x2, y2] = vp.convertToViewportPoint(e + w, f + h);
+      const cx = (x1 + x2) / 2 / vp.width;
+      const cy = (y1 + y2) / 2 / vp.height;
+      if (cx < area.x || cx > area.x + area.w || cy < area.y || cy > area.y + area.h) continue;
+      out.push({ n: parseInt(s, 10), cx, cy, hw: Math.abs(x2 - x1) / 2 / vp.width, hh: Math.abs(y2 - y1) / 2 / vp.height });
+    }
+    return out.length ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+function nearestLabel(labels, nx, ny) {
+  let best = null;
+  let bd = Infinity;
+  for (const l of labels) {
+    // 글자 상자 크기로 나눈 거리: 상자 안이면 1 이하
+    const d = Math.hypot((nx - l.cx) / Math.max(l.hw, 0.004), (ny - l.cy) / Math.max(l.hh, 0.004));
+    if (d < bd) { bd = d; best = l; }
+  }
+  return bd <= 2.2 ? best : null;
 }
 
 // ---------- 뜨기 화면 ----------
