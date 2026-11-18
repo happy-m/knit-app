@@ -4,10 +4,10 @@ import { ChartView } from './chartview.js';
 import { esc, icon, ro, eul, toast, dialog, ask, sheet, clearLayer } from './ui.js';
 import {
   calibrated, validPair, axis, rowsOf, colsOf, startProgress, knitIndex, isRightSide,
-  repeatTotal, nextRow, prevRow, jumpTo, partStatus,
+  repeatTotal, nextRow, prevRow, jumpTo, partStatus, isText,
 } from './knitting.js';
 
-const APP_VERSION = 9;
+const APP_VERSION = 10;
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -24,6 +24,7 @@ const routes = [
   [/^#\/padd\/([\w-]+)$/, viewPartAdd],
   [/^#\/cal\/([\w-]+)\/([1-4])$/, viewCal],
   [/^#\/k\/([\w-]+)$/, viewKnit],
+  [/^#\/txt\/([\w-]+)$/, viewTextSetup],
 ];
 
 async function route() {
@@ -54,6 +55,7 @@ function header(back, title, sub = '', right = '') {
 }
 
 function partMeta(part) {
+  if (isText(part)) return `글 설명 · ${part.page}쪽${part.text?.goal ? ` · 목표 ${part.text.goal}단` : ''}`;
   if (!calibrated(part)) return `${part.page}쪽 · 설정 중`;
   const R = rowsOf(part);
   const m = part.cal.mode;
@@ -63,6 +65,7 @@ function partMeta(part) {
 }
 
 function partHref(part) {
+  if (isText(part)) return calibrated(part) ? `#/k/${part.id}` : `#/txt/${part.id}`;
   return calibrated(part) ? `#/k/${part.id}` : `#/cal/${part.id}/1`;
 }
 
@@ -84,7 +87,9 @@ async function viewHome() {
       const badge =
         st === 'setup' ? '<span class="tag-red">격자 맞추기 필요</span>'
         : st === 'done' ? `<span class="tag-done">${icon.check}완료</span>`
-        : `<span class="num pill-hl">${cur.progress?.row ?? rowsOf(cur).lo}단</span><span class="num muted">/ ${rowsOf(cur).hi}단</span>`;
+        : isText(cur)
+          ? `<span class="num pill-hl">${cur.progress?.row ?? 1}단</span>${cur.text.goal ? `<span class="num muted">/ ${cur.text.goal}단</span>` : ''}`
+          : `<span class="num pill-hl">${cur.progress?.row ?? rowsOf(cur).lo}단</span><span class="num muted">/ ${rowsOf(cur).hi}단</span>`;
       curHtml = `<span class="cur-name">${esc(cur.name)}</span>${badge}`;
     }
     const resume = cur ? partHref(cur) : `#/padd/${p.id}`;
@@ -165,7 +170,7 @@ async function viewProject(pid) {
     const badge =
       st === 'done' ? `<span class="tag-done">${icon.check}완료</span>`
       : st === 'active' ? `<span class="num pill-hl">${x.progress.row}단</span>`
-      : st === 'setup' ? '<span class="tag-red">격자 맞추기</span>'
+      : st === 'setup' ? `<span class="tag-red">${isText(x) ? '영역 지정' : '격자 맞추기'}</span>`
       : '<span class="muted small">시작 전</span>';
     return `<div class="part-row${st === 'active' || x.id === proj.lastPartId ? ' is-cur' : ''}${st === 'setup' ? ' is-setup' : ''}">
       <a class="part-main" href="${partHref(x)}"><span class="num part-no">${i + 1}</span>
@@ -214,7 +219,7 @@ async function partActions(id, proj, parts) {
   const part = parts.find((x) => x.id === id);
   const i = parts.indexOf(part);
   const v = await sheet(part.name, [
-    { label: '격자 다시 맞추기', value: 'cal' },
+    { label: isText(part) ? '설명 영역·목표 단수 고치기' : '격자 다시 맞추기', value: 'cal' },
     { label: '복제 (왼팔·오른팔처럼 같은 차트를 한 번 더)', value: 'dup' },
     { label: '이름 바꾸기', value: 'rename' },
     ...(i > 0 ? [{ label: '위로 옮기기', value: 'up' }] : []),
@@ -223,7 +228,7 @@ async function partActions(id, proj, parts) {
     { label: '파트 삭제', value: 'delete', danger: true },
   ]);
   if (!v) return;
-  if (v === 'cal') return go(`#/cal/${id}/1`);
+  if (v === 'cal') return go(isText(part) ? `#/txt/${id}` : `#/cal/${id}/1`);
   if (v === 'rename') {
     const n = await ask('파트 이름', part.name);
     if (n) { part.name = n; await db.put('parts', part); }
@@ -274,7 +279,9 @@ async function viewPartAdd(pid) {
   app.innerHTML = `${header(`#/p/${pid}`, '파트 추가', `${esc(proj.name)}${proj.size ? ` · 사이즈 ${esc(proj.size)}` : ''}`)}
     <div class="page"><div class="wrap">
       <div class="field"><label for="ptname">파트 이름</label><input id="ptname" class="input" autocomplete="off" placeholder="예: 뒷판"></div>
-      <div class="label">차트가 있는 페이지를 고르세요</div>
+      <div class="field"><span class="label">도안 형태</span>
+        <div class="seg"><button type="button" data-kind="chart" aria-pressed="true">기호 차트</button><button type="button" data-kind="text" aria-pressed="false">글 설명만</button></div></div>
+      <div class="label" id="pagelabel">차트가 있는 페이지를 고르세요</div>
       <p class="hint">페이지를 탭하면 크게 볼 수 있습니다.</p>
       <div class="thumbs" id="thumbs">${Array.from({ length: doc.numPages }, (_, i) =>
         `<button type="button" class="thumb" data-p="${i + 1}" aria-pressed="false"><span class="thumb-img"><canvas></canvas></span><span class="num">${i + 1}쪽</span></button>`).join('')}</div>
@@ -282,6 +289,13 @@ async function viewPartAdd(pid) {
     <div class="footer"><button class="btn primary" id="next" disabled>다음: 영역 지정</button></div>`;
   const nameIn = app.querySelector('#ptname');
   const nextBtn = app.querySelector('#next');
+  let kind = 'chart';
+  app.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => {
+    kind = b.dataset.kind;
+    app.querySelectorAll('[data-kind]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    app.querySelector('#pagelabel').textContent = kind === 'text' ? '설명이 있는 페이지를 고르세요' : '차트가 있는 페이지를 고르세요';
+    nextBtn.textContent = kind === 'text' ? '다음: 설명 영역' : '다음: 영역 지정';
+  }));
   const check = () => { nextBtn.disabled = !(nameIn.value.trim() && page); };
   nameIn.addEventListener('input', check);
   const io = new IntersectionObserver((ents) => {
@@ -309,9 +323,11 @@ async function viewPartAdd(pid) {
     const part = {
       id: db.uid(), projectId: pid, name: nameIn.value.trim(), page,
       order: parts.length ? parts[parts.length - 1].order + 1 : 0, cal: {}, progress: null, created: Date.now(),
+      kind,
     };
+    if (kind === 'text') part.text = { area: null, goal: null };
     await db.put('parts', part);
-    location.replace(`#/cal/${part.id}/1`);
+    location.replace(kind === 'text' ? `#/txt/${part.id}` : `#/cal/${part.id}/1`);
   });
 }
 
@@ -859,6 +875,7 @@ function nearestLabel(labels, nx, ny) {
 async function viewKnit(id) {
   const part = await db.get('parts', id);
   if (!part) return go('#/');
+  if (isText(part)) return viewTextKnit(part);
   if (!calibrated(part)) return location.replace(`#/cal/${id}/1`);
   const proj = await db.get('projects', part.projectId);
   const parts = await db.partsOf(proj.id);
@@ -1064,6 +1081,281 @@ async function viewKnit(id) {
   });
 }
 
+// ---------- 글 설명 파트: 설명 영역과 목표 단수 ----------
+async function viewTextSetup(id) {
+  const part = await db.get('parts', id);
+  if (!part) return go('#/');
+  const proj = await db.get('projects', part.projectId);
+  const doc = await loadPdf(proj.fileId);
+  part.text = part.text || { area: null, goal: null };
+  // 영역을 따로 안 그려도 넘어갈 수 있게 처음에는 페이지 전체로 둔다
+  let A = part.text.area ? { ...part.text.area } : { x: 0.03, y: 0.03, w: 0.94, h: 0.94 };
+  app.innerHTML = `${header(`#/p/${proj.id}`, part.name, `글 설명 · ${part.page}쪽`)}
+    <p class="lead">뜨면서 볼 <b>설명 부분을 사각형으로</b> 감싸주세요. 그대로 두면 페이지 전체를 봅니다.</p>
+    <div class="pv-box" id="pv"></div>
+    <div class="pin-row"><div class="pin-col">
+      <label for="goal" class="label">목표 단수 (선택)</label>
+      <div class="suffix"><input id="goal" class="input num" inputmode="numeric" placeholder="정해진 단수가 없으면 비워두세요" value="${part.text.goal ?? ''}"><span>단</span></div>
+    </div></div>
+    <button type="button" class="link-btn" id="pg">페이지 바꾸기 (${part.page}쪽)</button>
+    <div class="footer"><button type="button" class="btn" id="list">저장하고 목록으로</button><button type="button" class="btn primary" id="start">완료하고 뜨기 시작</button></div>`;
+  const box = app.querySelector('#pv');
+  box.innerHTML = '<div class="pv-stage"><canvas></canvas><div class="pv-rect"><i class="h tl"></i><i class="h tr"></i><i class="h bl"></i><i class="h br"></i></div></div>';
+  const stage = box.querySelector('.pv-stage');
+  const rect = box.querySelector('.pv-rect');
+  let W = 0, H = 0;
+  const draw = () => Object.assign(rect.style, { left: A.x * W + 'px', top: A.y * H + 'px', width: A.w * W + 'px', height: A.h * H + 'px' });
+  const layout = async () => {
+    const sz = await pageSize(doc, part.page);
+    const cssW = Math.min(box.clientWidth - 2, ((box.clientHeight - 2) * sz.w) / sz.h);
+    W = cssW;
+    H = (cssW * sz.h) / sz.w;
+    stage.style.width = W + 'px';
+    stage.style.height = H + 'px';
+    await renderPage(doc, part.page, stage.querySelector('canvas'), cssW);
+    draw();
+  };
+  await layout();
+  let anchor = null;
+  const pt = (e) => {
+    const r = stage.getBoundingClientRect();
+    return [clamp((e.clientX - r.left) / W, 0, 1), clamp((e.clientY - r.top) / H, 0, 1)];
+  };
+  stage.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    stage.setPointerCapture(e.pointerId);
+    const [x, y] = pt(e);
+    anchor = [x, y];
+    const corners = [[A.x, A.y], [A.x + A.w, A.y], [A.x, A.y + A.h], [A.x + A.w, A.y + A.h]];
+    for (let i = 0; i < 4; i++) {
+      const [cx, cy] = corners[i];
+      if (Math.hypot((cx - x) * W, (cy - y) * H) < 28) { anchor = corners[3 - i]; break; }
+    }
+  });
+  stage.addEventListener('pointermove', (e) => {
+    if (!anchor) return;
+    const [x, y] = pt(e);
+    const nA = { x: Math.min(x, anchor[0]), y: Math.min(y, anchor[1]), w: Math.abs(x - anchor[0]), h: Math.abs(y - anchor[1]) };
+    if (nA.w * W > 16 && nA.h * H > 16) { A = nA; draw(); }
+  });
+  const up = () => { anchor = null; };
+  stage.addEventListener('pointerup', up);
+  stage.addEventListener('pointercancel', up);
+  const finish = async (dest) => {
+    const g = parseInt(app.querySelector('#goal').value.replace(/\D/g, ''), 10);
+    part.text = { area: A, goal: Number.isFinite(g) && g > 0 ? g : null };
+    part.kind = 'text';
+    if (!part.progress) part.progress = { row: 1, line: null, done: false };
+    await db.put('parts', part);
+    go(dest);
+  };
+  app.querySelector('#list').addEventListener('click', () => finish(`#/p/${proj.id}`));
+  app.querySelector('#start').addEventListener('click', () => finish(`#/k/${part.id}`));
+  app.querySelector('#pg').addEventListener('click', async () => {
+    const v = await sheet('설명이 있는 페이지', Array.from({ length: doc.numPages }, (_, i) => ({ label: `${i + 1}쪽`, value: i + 1, current: i + 1 === part.page })));
+    if (!v || v === part.page) return;
+    part.page = v;
+    part.text.area = null;
+    await db.put('parts', part);
+    route();
+  });
+}
+
+// PDF 글자 층에서 줄 단위 위치를 모은다 (영역 안, 정규화 좌표)
+async function readTextLines(page, area) {
+  try {
+    const vp = page.getViewport({ scale: 1 });
+    const tc = await page.getTextContent();
+    const boxes = [];
+    for (const it of tc.items) {
+      if (!(it.str || '').trim()) continue;
+      const [, b, , d, e, f] = it.transform;
+      const h = Math.hypot(b, d) || it.height || 0;
+      const [x1, y1] = vp.convertToViewportPoint(e, f);
+      const [, y2] = vp.convertToViewportPoint(e, f + h);
+      const top = Math.min(y1, y2) / vp.height;
+      const bot = Math.max(y1, y2) / vp.height;
+      const cx = x1 / vp.width;
+      if (cx < area.x || cx > area.x + area.w || bot < area.y || top > area.y + area.h) continue;
+      boxes.push({ top, bot, c: (top + bot) / 2 });
+    }
+    boxes.sort((p, q) => p.c - q.c);
+    const lines = [];
+    for (const bx of boxes) {
+      const L = lines[lines.length - 1];
+      if (L && Math.abs(bx.c - L.c) < (L.bot - L.top) * 0.5) {
+        L.top = Math.min(L.top, bx.top);
+        L.bot = Math.max(L.bot, bx.bot);
+      } else lines.push({ ...bx });
+    }
+    return lines;
+  } catch {
+    return [];
+  }
+}
+
+// ---------- 글 설명 파트: 뜨기 화면 ----------
+async function viewTextKnit(part) {
+  const id = part.id;
+  if (!calibrated(part)) return location.replace(`#/txt/${id}`);
+  const proj = await db.get('projects', part.projectId);
+  const parts = await db.partsOf(proj.id);
+  const doc = await loadPdf(proj.fileId);
+  if (!part.progress) part.progress = { row: 1, line: null, done: false };
+  const p = () => part.progress;
+  const goal = part.text.goal;
+  const R = { lo: 1, hi: goal || 9999 };
+  const idx = parts.findIndex((x) => x.id === id);
+  const nextPart = parts[idx + 1];
+  proj.lastPartId = id;
+  proj.updated = Date.now();
+  await db.put('projects', proj);
+
+  app.innerHTML = `<div class="knit text-knit">
+    <div class="k-main">
+      <div class="k-top">
+        <a class="icon-btn" href="#/p/${proj.id}" aria-label="파트 목록으로">${icon.back}</a>
+        <button type="button" class="part-switch" id="sw" aria-label="다른 파트로 바꾸기">
+          <span class="ps-t"><span class="ps-name">${esc(part.name)}</span><span class="ps-sub">${proj.size ? `사이즈 ${esc(proj.size)} · ` : ''}파트 ${idx + 1}/${parts.length}</span></span>${icon.chev}</button>
+        <span class="k-spacer"></span>
+        <button type="button" class="btn" id="docbtn">도안</button>
+      </div>
+      <div class="k-chart" id="chart"></div>
+      <p class="hint pad k-hint">읽고 있는 줄을 탭하면 형광펜 띠가 옮겨갑니다.</p>
+    </div>
+    <div class="k-ctrl">
+      <button type="button" class="row-card" id="rowcard" aria-label="단 번호를 입력해 이동"></button>
+      <button type="button" class="next-btn" id="next">다음 단</button>
+      <button type="button" class="btn prev-btn" id="prev">${icon.undo}이전 단</button>
+    </div></div>`;
+
+  const save = async () => { part.updated = Date.now(); await db.put('parts', part); };
+  const snapshot = () => JSON.stringify(part.progress);
+  const restore = async (s) => { part.progress = JSON.parse(s); await save(); refresh(); };
+
+  const decorate = (v) => {
+    const L = p().line;
+    if (!L) return '';
+    const [w] = v.size();
+    const y1 = v.n2p(0, L.top)[1];
+    const y2 = v.n2p(0, L.bot)[1];
+    return `<i class="band" style="left:0;top:${y1 - 2}px;width:${w}px;height:${y2 - y1 + 4}px"></i>`;
+  };
+  const rowcard = app.querySelector('#rowcard');
+  const nextBtn = app.querySelector('#next');
+  const refresh = () => {
+    const pr = p();
+    const pct = goal ? Math.min(100, ((pr.done ? goal : pr.row - 1) / goal) * 100) : 0;
+    rowcard.innerHTML = `<span class="rc-top"><span>${pr.done ? '완료' : '지금 뜨는 단'}</span><span class="rc-jump">${icon.edit}단 이동</span></span>
+      <span class="rc-num"><span class="num rc-big">${pr.row}</span><span class="rc-u">단</span>${goal ? `<span class="num muted">/ ${goal}</span>` : ''}</span>
+      ${goal ? `<span class="bar"><i style="width:${pct}%"></i></span>` : ''}
+      <span class="rc-line small muted">${pr.done ? `${esc(part.name)} 완료` : `${pr.row > 1 ? `${pr.row - 1}단까지 떴습니다` : '첫 단을 뜨는 중'}${goal ? ` · 목표까지 ${Math.max(0, goal - pr.row + 1)}단` : ''}`}</span>`;
+    nextBtn.disabled = !!pr.done;
+    nextBtn.textContent = pr.done ? '다 떴습니다' : '다음 단';
+    cv.redraw();
+  };
+
+  const zKey = `knit.textScale.${id}`;
+  const cv = new ChartView(app.querySelector('#chart'), {
+    doc, pageNum: part.page, area: part.text.area, decorate,
+    onScale: (s) => { try { localStorage.setItem(zKey, String(s)); } catch {} },
+    onTap: async (nx, ny) => {
+      const lines = await linesP;
+      let L = null;
+      if (lines.length) {
+        let bd = Infinity;
+        for (const l of lines) {
+          const d = ny < l.top ? l.top - ny : ny > l.bot ? ny - l.bot : 0;
+          if (d < bd) { bd = d; L = l; }
+        }
+        if (bd > 0.03) L = null;
+      }
+      if (!L) L = { top: ny - 0.008, bot: ny + 0.008 };
+      const cur = p().line;
+      p().line = cur && Math.abs(cur.top - L.top) < 0.002 ? null : { top: L.top, bot: L.bot };
+      await save();
+      refresh();
+    },
+  });
+  window.__cv = cv;
+  onCleanup(() => { cv.destroy(); if (window.__cv === cv) window.__cv = null; });
+  let saved = 0;
+  try { saved = +localStorage.getItem(zKey) || 0; } catch {}
+  await cv.init(saved || undefined);
+  const linesP = readTextLines(cv.page, part.text.area);
+  if (!saved) {
+    // 처음 열 때는 글자가 읽힐 만큼(줄 높이 약 15px) 확대해서 시작한다
+    const lines = await linesP;
+    const hs = lines.map((l) => l.bot - l.top).sort((a, b) => a - b);
+    const h = hs[Math.floor(hs.length / 2)];
+    if (h) cv.setScale(Math.max(cv.s, 15 / (h * cv.H1)));
+  }
+  const L0 = p().line;
+  cv.scrollTo(part.text.area.x, L0 ? L0.top : part.text.area.y, { x: 'start', yFrac: L0 ? 0.35 : 0 });
+  refresh();
+
+  nextBtn.addEventListener('click', async () => {
+    const snap = snapshot();
+    const pr = p();
+    if (goal && pr.row >= goal) {
+      pr.done = true;
+      await save();
+      refresh();
+      if (nextPart) {
+        const yes = await dialog({
+          title: `<span class="ok">${icon.check}${esc(part.name)} 완료</span>`,
+          body: `목표 단수까지 떴습니다.<br>다음 파트 <span class="pill-hl">${esc(nextPart.name)}</span>${ro(nextPart.name)} 넘어갈까요?`,
+          buttons: [{ label: '아니오', value: false }, { label: '네', value: true, primary: true }],
+        });
+        if (yes) go(partHref(nextPart));
+      } else {
+        toast(`<b>${esc(part.name)}</b>${eul(part.name)} 다 떴습니다`, { action: '취소', onAction: () => restore(snap) });
+      }
+      return;
+    }
+    pr.row += 1;
+    pr.touched = true;
+    await save();
+    refresh();
+    toast(`<b>${pr.row}단</b>으로 넘어갔습니다`, { action: '취소', onAction: () => restore(snap) });
+  });
+  app.querySelector('#prev').addEventListener('click', async () => {
+    const pr = p();
+    if (pr.done) pr.done = false;
+    else if (pr.row > 1) pr.row -= 1;
+    else { toast('첫 단입니다'); return; }
+    pr.touched = true;
+    await save();
+    refresh();
+  });
+  rowcard.addEventListener('click', async () => {
+    const r = await keypad(R, p().row);
+    if (r === null || r === undefined) return;
+    const snap = snapshot();
+    p().row = r;
+    p().done = false;
+    p().touched = true;
+    await save();
+    refresh();
+    toast(`<b>${r}단</b>으로 이동했습니다`, { action: '취소', onAction: () => restore(snap) });
+  });
+  app.querySelector('#sw').addEventListener('click', async () => {
+    const v = await sheet('파트 바꾸기', parts.map((x) => {
+      const st = partStatus(x);
+      return { label: x.name, value: x.id, current: x.id === id,
+        sub: st === 'done' ? '완료' : st === 'setup' ? '설정 필요' : st === 'active' ? `${x.progress.row}단` : '시작 전' };
+    }));
+    if (v && v !== id) go(partHref(parts.find((x) => x.id === v)));
+  });
+  app.querySelector('#docbtn').addEventListener('click', () => openDoc(doc));
+  let lock = null;
+  const keepAwake = async () => { try { lock = await navigator.wakeLock?.request('screen'); } catch {} };
+  keepAwake();
+  const vis = () => { if (document.visibilityState === 'visible') keepAwake(); };
+  document.addEventListener('visibilitychange', vis);
+  onCleanup(() => { document.removeEventListener('visibilitychange', vis); lock?.release?.().catch(() => {}); });
+}
+
 // 단 번호 입력 키패드
 function keypad(R, current) {
   return new Promise((resolve) => {
@@ -1071,7 +1363,7 @@ function keypad(R, current) {
     const el = document.createElement('div');
     el.className = 'scrim sheet-scrim';
     el.innerHTML = `<div class="sheet keypad" role="dialog" aria-modal="true">
-      <div class="kp-head"><b>몇 단으로 갈까요?</b><span class="muted small">${R.lo}~${R.hi}단</span></div>
+      <div class="kp-head"><b>몇 단으로 갈까요?</b><span class="muted small">${R.hi >= 9999 ? `${R.lo}단 이상` : `${R.lo}~${R.hi}단`}</span></div>
       <div class="kp-row"><div class="kp-disp"><span class="num" id="kv"></span><span>단</span></div><button type="button" class="btn primary" id="kgo">이동</button></div>
       <div class="kp-note muted small" id="kn"></div>
       <div class="kp-grid">${['1', '2', '3', '4', '5', '6', '7', '8', '9', '취소', '0', '지움']

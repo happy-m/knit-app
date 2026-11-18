@@ -46,7 +46,10 @@ export function axis(pair, key) {
   return { lo, hi, pitch, table: true, at, pitchAt, nearest };
 }
 
+export const isText = (part) => part.kind === 'text';
+
 export function calibrated(part) {
+  if (isText(part)) return !!(part.text && part.text.area);
   const c = part.cal || {};
   return !!(c.area && validPair(c.rows, 'y') && validPair(c.cols, 'x') && c.mode);
 }
