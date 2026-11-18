@@ -7,7 +7,7 @@ import {
   repeatTotal, nextRow, prevRow, jumpTo, partStatus, isText,
 } from './knitting.js';
 
-const APP_VERSION = 11;
+const APP_VERSION = 12;
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
