@@ -48,10 +48,42 @@ export function axis(pair, key) {
 
 export const isText = (part) => part.kind === 'text';
 
+// ---- 구간 ----
+// 파트 하나가 여러 페이지(또는 한 페이지의 일부)에 걸칠 수 있다.
+// part.segs = [{ page, area, rows, cols }] (글 설명 파트는 { page, area })
+// 예전 형식(part.page + part.cal.area/rows/cols, part.text.area)은 구간 1개로 바꿔 읽는다.
+export function segsOf(part) {
+  if (!Array.isArray(part.segs) || !part.segs.length) {
+    if (isText(part)) part.segs = [{ page: part.page, area: part.text?.area || null }];
+    else {
+      const c = part.cal || {};
+      part.segs = [{ page: part.page, area: c.area || null, rows: c.rows || null, cols: c.cols || null }];
+    }
+  }
+  return part.segs;
+}
+
+// 구간 하나만 보는 가짜 파트. 한 페이지용 화면 코드를 그대로 쓰기 위한 것
+export function segPart(part, i) {
+  const s = segsOf(part)[i];
+  return {
+    ...part,
+    segIndex: i,
+    page: s.page,
+    cal: { ...(part.cal || {}), area: s.area, rows: s.rows, cols: s.cols },
+    text: isText(part) ? { ...(part.text || {}), area: s.area } : part.text,
+  };
+}
+
+export function segReady(part, s) {
+  if (isText(part)) return !!s.area;
+  return !!(s.area && validPair(s.rows, 'y') && validPair(s.cols, 'x'));
+}
+
 export function calibrated(part) {
-  if (isText(part)) return !!(part.text && part.text.area);
-  const c = part.cal || {};
-  return !!(c.area && validPair(c.rows, 'y') && validPair(c.cols, 'x') && c.mode);
+  const segs = segsOf(part);
+  if (!segs.every((s) => segReady(part, s))) return false;
+  return isText(part) ? true : !!part.cal?.mode;
 }
 
 export function validPair(pair, key) {
@@ -63,11 +95,38 @@ export function validPair(pair, key) {
   );
 }
 
+// 구간 하나(segPart)면 그 구간의 격자, 파트 전체면 모든 구간을 합친 단 범위({lo, hi})
 export function rowsOf(part) {
-  return axis(part.cal.rows, 'y');
+  if (part.segIndex !== undefined) return axis(part.cal.rows, 'y');
+  const ax = segsOf(part).filter((s) => validPair(s.rows, 'y')).map((s) => axis(s.rows, 'y'));
+  if (!ax.length) return { lo: 1, hi: 1 };
+  return { lo: Math.min(...ax.map((a) => a.lo)), hi: Math.max(...ax.map((a) => a.hi)) };
 }
 export function colsOf(part) {
   return axis(part.cal.cols, 'x');
+}
+
+// 이 단이 들어 있는 구간 번호. 어디에도 없으면 가장 가까운 구간
+export function segForRow(part, row) {
+  const segs = segsOf(part);
+  let best = 0;
+  let bd = Infinity;
+  segs.forEach((s, i) => {
+    if (!validPair(s.rows, 'y')) return;
+    const a = axis(s.rows, 'y');
+    const d = row < a.lo ? a.lo - row : row > a.hi ? row - a.hi : 0;
+    if (d < bd) { bd = d; best = i; }
+  });
+  return best;
+}
+
+// 구간들이 걸친 페이지를 짧게: "5쪽", "5~6쪽", "5·8쪽"
+export function pagesLabel(part) {
+  const ps = [];
+  for (const s of segsOf(part)) if (ps[ps.length - 1] !== s.page) ps.push(s.page);
+  if (ps.length === 1) return `${ps[0]}쪽`;
+  const run = ps.every((p, i) => i === 0 || p === ps[i - 1] + 1);
+  return run ? `${ps[0]}~${ps[ps.length - 1]}쪽` : `${ps.join('·')}쪽`;
 }
 
 export function startProgress(part) {

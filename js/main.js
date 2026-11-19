@@ -6,9 +6,11 @@ import { esc, icon, ro, eul, toast, dialog, ask, sheet, clearLayer } from './ui.
 import {
   calibrated, validPair, axis, rowsOf, colsOf, startProgress, knitIndex, isRightSide,
   repeatTotal, nextRow, prevRow, jumpTo, partStatus, isText,
+  segsOf, segPart, segReady, segForRow, pagesLabel,
 } from './knitting.js';
+import { StackView } from './stackview.js';
 
-const APP_VERSION = '1.9.0';
+const APP_VERSION = '1.10.0';
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -23,9 +25,9 @@ const routes = [
   [/^#\/new$/, viewNew],
   [/^#\/p\/([\w-]+)$/, viewProject],
   [/^#\/padd\/([\w-]+)$/, viewPartAdd],
-  [/^#\/cal\/([\w-]+)\/([1-4])$/, viewCal],
+  [/^#\/cal\/([\w-]+)\/([1-4])(?:\/(\d+))?$/, viewCal],
   [/^#\/k\/([\w-]+)$/, viewKnit],
-  [/^#\/txt\/([\w-]+)$/, viewTextSetup],
+  [/^#\/txt\/([\w-]+)(?:\/(\d+))?$/, viewTextSetup],
   [/^#\/info\/([\w-]+)$/, viewInfo],
 ];
 
@@ -57,18 +59,46 @@ function header(back, title, sub = '', right = '') {
 }
 
 function partMeta(part) {
-  if (isText(part)) return `글 설명 · ${part.page}쪽${part.text?.goal ? ` · 목표 ${part.text.goal}단` : ''}`;
-  if (!calibrated(part)) return `${part.page}쪽 · 설정 중`;
+  const pages = pagesLabel(part);
+  if (isText(part)) return `글 설명 · ${pages}${part.text?.goal ? ` · 목표 ${part.text.goal}단` : ''}`;
+  if (!calibrated(part)) return `${pages} · 설정 중`;
   const R = rowsOf(part);
   const m = part.cal.mode;
   const rep = repeatTotal(part);
-  return `${m.type === 'round' ? '원통' : '평면'} · ${R.lo}~${R.hi}단 · ${part.page}쪽` +
+  return `${m.type === 'round' ? '원통' : '평면'} · ${R.lo}~${R.hi}단 · ${pages}` +
     (rep !== null ? ` · ${rep === 0 ? '계속' : rep + '회'} 반복` : '');
 }
 
 function partHref(part) {
-  if (isText(part)) return calibrated(part) ? `#/k/${part.id}` : `#/txt/${part.id}`;
-  return calibrated(part) ? `#/k/${part.id}` : `#/cal/${part.id}/1`;
+  if (calibrated(part)) return `#/k/${part.id}`;
+  const i = segsOf(part).findIndex((s) => !segReady(part, s));
+  if (isText(part)) return `#/txt/${part.id}/${Math.max(0, i)}`;
+  return i < 0 ? `#/cal/${part.id}/4` : `#/cal/${part.id}/1/${i}`;
+}
+
+// 격자 맞추기 주소. 1~3단계는 구간마다, 4단계(뜨는 방식)는 파트 전체에 한 번
+function calUrl(id, step, seg = 0) {
+  return step >= 4 ? `#/cal/${id}/4` : `#/cal/${id}/${step}/${seg}`;
+}
+// 다음 단계: 3단계 다음은 다음 구간의 1단계, 마지막 구간이면 4단계
+function calNextUrl(part, step) {
+  const seg = part.segIndex ?? 0;
+  if (step < 3) return calUrl(part.id, step + 1, seg);
+  return seg + 1 < segsOf(part).length ? calUrl(part.id, 1, seg + 1) : calUrl(part.id, 4);
+}
+function calPrevUrl(part, step, seg, projId) {
+  if (step === 4) return calUrl(part.id, 3, segsOf(part).length - 1);
+  if (step > 1) return calUrl(part.id, step - 1, seg);
+  return seg > 0 ? calUrl(part.id, 3, seg - 1) : `#/p/${projId}`;
+}
+// 구간이 여럿이면 지금 어느 구간인지 칩으로 보여준다
+function segChips(part, now, ready) {
+  const segs = segsOf(part);
+  if (segs.length < 2) return '';
+  return `<div class="seg-chips">${segs.map((sg, i) => {
+    const ok = ready(sg, i) && i !== now;
+    return `<span class="chip${i === now ? ' on' : ok ? ' ok' : ''}">${i + 1} · ${sg.page}쪽${ok ? ' ✓' : ''}</span>`;
+  }).join('')}</div>`;
 }
 
 function currentPart(proj, parts) {
@@ -438,6 +468,8 @@ async function partActions(id, proj, parts) {
   const i = parts.indexOf(part);
   const v = await sheet(part.name, [
     { label: isText(part) ? '설명 영역·목표 단수 고치기' : '격자 다시 맞추기', value: 'cal' },
+    { label: '이어지는 페이지 추가 (다음 쪽으로 넘어가는 부분)', value: 'addseg' },
+    ...(segsOf(part).length > 1 ? [{ label: `마지막 구간 빼기 (${segsOf(part).at(-1).page}쪽)`, value: 'rmseg' }] : []),
     { label: '복제 (왼팔·오른팔처럼 같은 차트를 한 번 더)', value: 'dup' },
     { label: '이름 바꾸기', value: 'rename' },
     ...(i > 0 ? [{ label: '위로 옮기기', value: 'up' }] : []),
@@ -446,7 +478,34 @@ async function partActions(id, proj, parts) {
     { label: '파트 삭제', value: 'delete', danger: true },
   ]);
   if (!v) return;
-  if (v === 'cal') return go(isText(part) ? `#/txt/${id}` : `#/cal/${id}/1`);
+  if (v === 'cal') return go(isText(part) ? `#/txt/${id}/0` : calUrl(id, 1, 0));
+  if (v === 'addseg') {
+    const doc = await loadPdf(proj.fileId);
+    const last = segsOf(part).at(-1).page;
+    const pg = await sheet('이어지는 페이지', Array.from({ length: doc.numPages }, (_, i) => ({
+      label: `${i + 1}쪽`, value: i + 1, current: i + 1 === last + 1, sub: segsOf(part).some((x) => x.page === i + 1) ? '이미 이 파트에 있음 (다른 부분을 잡을 때)' : '',
+    })));
+    if (!pg) return;
+    const i = segsOf(part).length;
+    part.segs.push(isText(part) ? { page: pg, area: null } : { page: pg, area: null, rows: null, cols: null });
+    await db.put('parts', part);
+    return go(isText(part) ? `#/txt/${id}/${i}` : calUrl(id, 1, i));
+  }
+  if (v === 'rmseg') {
+    const ok = await dialog({
+      title: '마지막 구간 빼기',
+      body: `${segsOf(part).at(-1).page}쪽 구간을 이 파트에서 뺍니다. 그 구간의 영역과 격자 설정이 지워집니다.`,
+      buttons: [{ label: '취소', value: false }, { label: '빼기', value: true, danger: true }],
+    });
+    if (!ok) return;
+    part.segs.pop();
+    if (part.progress && !isText(part) && calibrated(part)) {
+      const R = rowsOf(part);
+      part.progress.row = clamp(part.progress.row, R.lo, R.hi);
+    }
+    if (part.progress?.line && (part.progress.line.seg ?? 0) >= part.segs.length) part.progress.line = null;
+    await db.put('parts', part);
+  }
   if (v === 'rename') {
     const n = await ask('파트 이름', part.name);
     if (n) { part.name = n; await db.put('parts', part); }
@@ -493,14 +552,15 @@ async function viewPartAdd(pid) {
   if (!proj) return go('#/');
   const parts = await db.partsOf(pid);
   const doc = await loadPdf(proj.fileId);
-  let page = null;
+  const pages = []; // 고른 순서대로
   app.innerHTML = `${header(`#/p/${pid}`, '파트 추가', `${esc(proj.name)}${proj.size ? ` · 사이즈 ${esc(proj.size)}` : ''}`)}
     <div class="page"><div class="wrap">
       <div class="field"><label for="ptname">파트 이름</label><input id="ptname" class="input" autocomplete="off" placeholder="예: 뒷판"></div>
       <div class="field"><span class="label">도안 형태</span>
         <div class="seg"><button type="button" data-kind="chart" aria-pressed="true">기호 차트</button><button type="button" data-kind="text" aria-pressed="false">글 설명만</button></div></div>
       <div class="label" id="pagelabel">차트가 있는 페이지를 고르세요</div>
-      <p class="hint">페이지를 탭하면 크게 볼 수 있습니다.</p>
+      <p class="hint">페이지를 탭하면 크게 보고 고를 수 있습니다. 다음 쪽으로 이어지면 <b>순서대로 여러 장</b> 고르세요. 고른 페이지를 다시 누르면 빠집니다.</p>
+      <div class="pick-order" id="order" hidden></div>
       <div class="thumbs" id="thumbs">${Array.from({ length: doc.numPages }, (_, i) =>
         `<button type="button" class="thumb" data-p="${i + 1}" aria-pressed="false"><span class="thumb-img"><canvas></canvas></span><span class="num">${i + 1}쪽</span></button>`).join('')}</div>
     </div></div>
@@ -512,9 +572,22 @@ async function viewPartAdd(pid) {
     kind = b.dataset.kind;
     app.querySelectorAll('[data-kind]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
     app.querySelector('#pagelabel').textContent = kind === 'text' ? '설명이 있는 페이지를 고르세요' : '차트가 있는 페이지를 고르세요';
-    nextBtn.textContent = kind === 'text' ? '다음: 설명 영역' : '다음: 영역 지정';
+    check();
   }));
-  const check = () => { nextBtn.disabled = !(nameIn.value.trim() && page); };
+  const check = () => {
+    nextBtn.disabled = !(nameIn.value.trim() && pages.length);
+    const base = kind === 'text' ? '다음: 설명 영역' : '다음: 영역 지정';
+    nextBtn.textContent = pages.length > 1 ? `${base} (구간 ${pages.length}개)` : base;
+    app.querySelectorAll('.thumb').forEach((t) => {
+      const k = pages.indexOf(+t.dataset.p);
+      t.setAttribute('aria-pressed', String(k >= 0));
+      t.querySelector('.thumb-badge')?.remove();
+      if (k >= 0) t.querySelector('.thumb-img').insertAdjacentHTML('beforeend', `<span class="thumb-badge num">${k + 1}</span>`);
+    });
+    const ord = app.querySelector('#order');
+    ord.hidden = pages.length < 2;
+    ord.innerHTML = `<span class="muted small">고른 순서</span>${pages.map((p) => `<span class="chip ok">${p}쪽</span>`).join('<span class="muted">→</span>')}`;
+  };
   nameIn.addEventListener('input', check);
   const io = new IntersectionObserver((ents) => {
     for (const e of ents) {
@@ -528,24 +601,28 @@ async function viewPartAdd(pid) {
     io.observe(t);
     t.addEventListener('click', async () => {
       const p = +t.dataset.p;
-      const ok = await previewPage(doc, p, '이 페이지로 고르기');
+      if (pages.includes(p)) {
+        pages.splice(pages.indexOf(p), 1);
+        check();
+        return;
+      }
+      const ok = await previewPage(doc, p, pages.length ? `${pages.length + 1}번째로 고르기` : '이 페이지로 고르기');
       if (!ok) return;
-      app.querySelectorAll('.thumb').forEach((x) => x.setAttribute('aria-pressed', 'false'));
-      t.setAttribute('aria-pressed', 'true');
-      page = p;
+      pages.push(p);
       check();
       if (!nameIn.value.trim()) nameIn.focus();
     });
   });
   nextBtn.addEventListener('click', async () => {
     const part = {
-      id: db.uid(), projectId: pid, name: nameIn.value.trim(), page,
+      id: db.uid(), projectId: pid, name: nameIn.value.trim(), page: pages[0],
       order: parts.length ? parts[parts.length - 1].order + 1 : 0, cal: {}, progress: null, created: Date.now(),
       kind,
+      segs: pages.map((pg) => (kind === 'text' ? { page: pg, area: null } : { page: pg, area: null, rows: null, cols: null })),
     };
-    if (kind === 'text') part.text = { area: null, goal: null };
+    if (kind === 'text') part.text = { goal: null };
     await db.put('parts', part);
-    location.replace(kind === 'text' ? `#/txt/${part.id}` : `#/cal/${part.id}/1`);
+    location.replace(kind === 'text' ? `#/txt/${part.id}/0` : calUrl(part.id, 1, 0));
   });
 }
 
@@ -559,22 +636,45 @@ function stepsHtml(now) {
   }).join('')}</div>`;
 }
 
-async function viewCal(id, stepStr) {
+async function viewCal(id, stepStr, segStr) {
   const step = +stepStr;
   const part = await db.get('parts', id);
   if (!part) return go('#/');
   const proj = await db.get('projects', part.projectId);
   const doc = await loadPdf(proj.fileId);
   part.cal = part.cal || {};
-  if (step > 1 && !part.cal.area) return location.replace(`#/cal/${id}/1`);
-  if (step > 2 && !validPair(part.cal.rows, 'y')) return location.replace(`#/cal/${id}/2`);
-  if (step > 3 && !validPair(part.cal.cols, 'x')) return location.replace(`#/cal/${id}/3`);
-  const back = step === 1 ? `#/p/${proj.id}` : `#/cal/${id}/${step - 1}`;
-  const save = () => db.put('parts', part);
-  const top = header(back, '격자 맞추기', `${esc(part.name)} · ${part.page}쪽`) + stepsHtml(step);
-  if (step === 1) return calArea(part, proj, doc, top, save);
-  if (step === 2 || step === 3) return calPoints(part, doc, top, save, step);
-  return calMode(part, proj, top, save);
+  const segs = segsOf(part);
+  const seg = clamp(+(segStr || 0), 0, segs.length - 1);
+  // 앞 단계가 안 된 상태로 들어오면 그 단계로 돌려보낸다
+  for (let i = 0; i < segs.length && (step === 4 || i <= seg); i++) {
+    const sg = segs[i];
+    const upto = step === 4 || i < seg ? 4 : step;
+    if (upto > 1 && !sg.area) return location.replace(calUrl(id, 1, i));
+    if (upto > 2 && !validPair(sg.rows, 'y')) return location.replace(calUrl(id, 2, i));
+    if (upto > 3 && !validPair(sg.cols, 'x')) return location.replace(calUrl(id, 3, i));
+  }
+  const back = calPrevUrl(part, step, seg, proj.id);
+  if (step === 4) {
+    const top = header(back, '격자 맞추기', `${esc(part.name)} · ${pagesLabel(part)}`) + stepsHtml(4);
+    return calMode(part, proj, top, () => db.put('parts', part));
+  }
+  // 구간 하나만 보는 가짜 파트로 화면을 그리고, 저장할 때 구간에 되돌려 쓴다
+  const vp = segPart(part, seg);
+  const save = () => {
+    const sg = part.segs[seg];
+    sg.page = vp.page;
+    sg.area = vp.cal.area || null;
+    sg.rows = vp.cal.rows || null;
+    sg.cols = vp.cal.cols || null;
+    if (vp.cal.mode !== undefined) part.cal.mode = vp.cal.mode;
+    part.updated = Date.now();
+    return db.put('parts', part);
+  };
+  const segTxt = segs.length > 1 ? ` · 구간 ${seg + 1}/${segs.length}` : '';
+  const top = header(back, '격자 맞추기', `${esc(part.name)} · ${vp.page}쪽${segTxt}`) + stepsHtml(step) +
+    segChips(part, seg, (sg) => !!(sg.area && validPair(sg.rows, 'y') && validPair(sg.cols, 'x')));
+  if (step === 1) return calArea(vp, proj, doc, top, save);
+  return calPoints(vp, doc, top, save, step);
 }
 
 async function calArea(part, proj, doc, top, save) {
@@ -674,7 +774,7 @@ async function calArea(part, proj, doc, top, save) {
   };
   stage.addEventListener('pointerup', up);
   stage.addEventListener('pointercancel', up);
-  nextBtn.addEventListener('click', () => go(`#/cal/${part.id}/2`));
+  nextBtn.addEventListener('click', () => go(calNextUrl(part, 1)));
   app.querySelector('#pg').addEventListener('click', async () => {
     const v = await sheet('차트가 있는 페이지', Array.from({ length: doc.numPages }, (_, i) => ({ label: `${i + 1}쪽`, value: i + 1, current: i + 1 === part.page })));
     if (!v || v === part.page) return;
@@ -715,7 +815,7 @@ async function calPoints(part, doc, top, save, step) {
     <div class="result" id="result"></div>
     <button type="button" class="link-btn" id="auto" hidden>번호 칸 자동으로 다시 찾기</button>
     <div class="footer"><button type="button" class="btn" id="grid" aria-pressed="${grid}">격자 겹쳐 보기</button>
-      <button type="button" class="btn primary" id="next">${isRow ? '다음: 코 번호' : '다음: 뜨는 방식'}</button></div>`;
+      <button type="button" class="btn primary" id="next">${isRow ? '다음: 코 번호' : (part.segIndex ?? 0) + 1 < segsOf(part).length ? `다음 구간 (${segsOf(part)[(part.segIndex ?? 0) + 1].page}쪽)` : '다음: 뜨는 방식'}</button></div>`;
   const resEl = app.querySelector('#result');
   const nextBtn = app.querySelector('#next');
   const unit = isRow ? '단' : '번';
@@ -936,7 +1036,7 @@ async function calPoints(part, doc, top, save, step) {
     e.currentTarget.setAttribute('aria-pressed', String(grid));
     cv.redraw();
   });
-  nextBtn.addEventListener('click', () => go(`#/cal/${part.id}/${step + 1}`));
+  nextBtn.addEventListener('click', () => go(calNextUrl(part, step)));
   refresh();
 }
 
@@ -1151,8 +1251,11 @@ async function viewKnit(id) {
   const doc = await loadPdf(proj.fileId);
   if (!part.progress) part.progress = startProgress(part);
   const p = () => part.progress;
-  const R = rowsOf(part);
-  const C = colsOf(part);
+  const segs = segsOf(part);
+  const RR = rowsOf(part); // 파트 전체 단 범위
+  // 지금 화면에 띄운 구간과 그 구간의 격자
+  let seg = segForRow(part, part.progress.row);
+  let R, C, cv;
   const idx = parts.findIndex((x) => x.id === id);
   const nextPart = parts[idx + 1];
   proj.lastPartId = id;
@@ -1169,6 +1272,7 @@ async function viewKnit(id) {
         <span class="dir-chip" id="dir"></span>
         <button type="button" class="btn" id="docbtn">도안</button>
       </div>
+      ${segs.length > 1 ? '<div class="seg-chips k-segs" id="segs"></div>' : ''}
       <div class="k-chart" id="chart"></div>
     </div>
     <div class="k-ctrl">
@@ -1185,7 +1289,8 @@ async function viewKnit(id) {
   const restore = async (s) => {
     part.progress = JSON.parse(s);
     await save();
-    refresh(true);
+    const moved = await followSeg();
+    refresh(moved ? 'first' : true);
   };
 
   const decorate = (v) => {
@@ -1193,7 +1298,7 @@ async function viewKnit(id) {
     const pr = p();
     const edge = (r) => [R.at(r) - R.pitchAt(r) / 2, R.at(r) + R.pitchAt(r) / 2];
     let h = '';
-    const lastDone = pr.done ? R.hi : pr.row - 1;
+    const lastDone = Math.min(pr.done ? RR.hi : pr.row - 1, R.hi);
     if (lastDone >= R.lo) {
       const [a1, a2] = edge(R.lo);
       const [b1, b2] = edge(lastDone);
@@ -1201,7 +1306,7 @@ async function viewKnit(id) {
       const y2 = v.n2p(0, Math.max(a2, b2))[1];
       h += `<i class="shade" style="left:0;top:${y1}px;width:${w}px;height:${y2 - y1}px"></i>`;
     }
-    if (!pr.done) {
+    if (!pr.done && pr.row >= R.lo && pr.row <= R.hi) {
       const [e1, e2] = edge(pr.row);
       const y1 = v.n2p(0, Math.min(e1, e2))[1];
       const y2 = v.n2p(0, Math.max(e1, e2))[1];
@@ -1230,60 +1335,101 @@ async function viewKnit(id) {
     dirEl.innerHTML = pr.done ? `${icon.check}다 떴습니다`
       : `${rs ? icon.left : icon.right}${round ? '원통' : rs ? '겉면' : '안면'}<span class="dir-long"> · ${rs ? '왼쪽' : '오른쪽'}으로 읽기</span>`;
     rowcard.innerHTML = `<span class="rc-top"><span>${pr.done ? '완료' : '지금'}</span><span class="rc-jump">${icon.edit}단 이동</span></span>
-      <span class="rc-num"><span class="num rc-big">${pr.row}</span><span class="rc-u">단</span><span class="num muted">/ ${R.hi}</span></span>
+      <span class="rc-num"><span class="num rc-big">${pr.row}</span><span class="rc-u">단</span><span class="num muted">/ ${RR.hi}</span></span>
       ${pr.done ? `<span class="tag-done">${icon.check}${esc(part.name)} 완료</span>`
         : pr.mark !== null && pr.mark !== undefined ? `<span class="rc-line"><i class="mk"></i>코 표시 <b class="num">${pr.mark}</b>번 칸</span>`
         : '<span class="rc-line muted">코 표시 없음</span>'}
       ${total !== null ? `<span class="rc-line small">반복 <b class="num">${pr.rep}/${total || '∞'}</b>회차 · 처음부터 <b class="num">${knitIndex(part) + 1}</b>단째</span>` : ''}`;
     nextBtn.disabled = !!pr.done;
     nextBtn.textContent = pr.done ? '다 떴습니다' : '다음 단';
+    segBar?.querySelectorAll('[data-seg]').forEach((b) => {
+      const i = +b.dataset.seg;
+      b.classList.toggle('on', i === seg);
+      b.classList.toggle('here', i === segForRow(part, pr.row) && i !== seg);
+    });
     cv.redraw();
     if (follow) {
       // 세로로는 현재 단을 따라가고, 가로로는 코 표시가 있을 때만 그쪽으로 옮긴다
-      const y = R.at(pr.done ? R.hi : pr.row);
+      const y = R.at(clamp(pr.done ? RR.hi : pr.row, R.lo, R.hi));
       if (pr.mark !== null && pr.mark !== undefined) cv.scrollTo(C.at(pr.mark), y, { x: 'center', smooth: follow !== 'first' });
       else cv.scrollTo((C.at(C.lo) + C.at(C.hi)) / 2, y, { x: follow === 'first' ? 'center' : 'keep', smooth: follow !== 'first' });
     }
   };
 
-  const sz = await pageSize(doc, part.page);
-  const pitchPt = R.pitch * sz.h;
   const key = `knit.rowPx.${id}`;
   let rowPx = 26;
   try { rowPx = +localStorage.getItem(key) || 26; } catch {}
 
-  const cv = new ChartView(app.querySelector('#chart'), {
-    doc, pageNum: part.page, area: part.cal.area, decorate,
-    onScale: (s) => { try { localStorage.setItem(key, String(s * pitchPt)); } catch {} },
-    onTap: async (nx, ny) => {
-      const pr = p();
-      if (pr.done) return;
-      const r = R.nearest(ny);
-      if (r !== pr.row) {
-        toast('다른 단으로 가려면 그 단을 <b>길게</b> 누르세요');
-        return;
-      }
-      const c = clamp(C.nearest(nx), C.lo, C.hi);
-      pr.mark = pr.mark === c ? null : c;
-      pr.touched = true;
-      await save();
-      refresh(false);
-    },
-    onLong: async (nx, ny) => {
-      const pr = p();
-      const r = clamp(R.nearest(ny), R.lo, R.hi);
-      if (r === pr.row && !pr.done) return;
-      const snap = snapshot();
-      jumpTo(part, r);
-      part.progress.touched = true;
-      await save();
-      refresh(true);
-      toast(`<b>${r}단</b>으로 이동했습니다`, { action: '취소', onAction: () => restore(snap) });
-    },
-  });
-  window.__cv = cv;
-  onCleanup(() => { cv.destroy(); if (window.__cv === cv) window.__cv = null; });
-  await cv.init(rowPx / pitchPt);
+  // 구간 i의 차트를 띄운다 (구간이 바뀌면 다시 부른다)
+  const showSeg = async (i) => {
+    seg = i;
+    const vp = segPart(part, i);
+    R = rowsOf(vp);
+    C = colsOf(vp);
+    const sz = await pageSize(doc, vp.page);
+    const pitchPt = R.pitch * sz.h;
+    if (cv) { cv.destroy(); if (window.__cv === cv) window.__cv = null; }
+    const host = app.querySelector('#chart');
+    const old = host.cloneNode(false);
+    host.replaceWith(old);
+    cv = new ChartView(old, {
+      doc, pageNum: vp.page, area: vp.cal.area, decorate,
+      onScale: (sc) => { try { rowPx = sc * pitchPt; localStorage.setItem(key, String(rowPx)); } catch {} },
+      onTap: async (nx, ny) => {
+        const pr = p();
+        if (pr.done) return;
+        const r = R.nearest(ny);
+        if (r !== pr.row) {
+          toast('다른 단으로 가려면 그 단을 <b>길게</b> 누르세요');
+          return;
+        }
+        const c = clamp(C.nearest(nx), C.lo, C.hi);
+        pr.mark = pr.mark === c ? null : c;
+        pr.touched = true;
+        await save();
+        refresh(false);
+      },
+      onLong: async (nx, ny) => {
+        const pr = p();
+        const r = clamp(R.nearest(ny), R.lo, R.hi);
+        if (r === pr.row && !pr.done) return;
+        const snap = snapshot();
+        jumpTo(part, r);
+        part.progress.touched = true;
+        await save();
+        refresh(true);
+        toast(`<b>${r}단</b>으로 이동했습니다`, { action: '취소', onAction: () => restore(snap) });
+      },
+    });
+    window.__cv = cv;
+    await cv.init(rowPx / pitchPt);
+  };
+  onCleanup(() => { cv?.destroy(); if (window.__cv === cv) window.__cv = null; });
+
+  // 단이 다른 구간으로 넘어가면 그 구간 차트로 바꾼다. 바뀌었으면 페이지 번호를 돌려준다
+  const followSeg = async () => {
+    const want = segForRow(part, p().row);
+    if (want === seg) return null;
+    await showSeg(want);
+    return segs[want].page;
+  };
+
+  const segBar = app.querySelector('#segs');
+  if (segBar) {
+    segBar.innerHTML = segs.map((sg, i) => {
+      const a = rowsOf(segPart(part, i));
+      return `<button type="button" class="chip" data-seg="${i}">${sg.page}쪽 · ${a.lo}~${a.hi}단</button>`;
+    }).join('');
+    segBar.querySelectorAll('[data-seg]').forEach((b) => b.addEventListener('click', async () => {
+      const i = +b.dataset.seg;
+      if (i === seg) return;
+      await showSeg(i);
+      refresh('first');
+      if (i !== segForRow(part, p().row)) toast(`${segs[i].page}쪽 차트를 보는 중입니다. 지금 단은 ${segs[segForRow(part, p().row)].page}쪽에 있어요.`);
+    }));
+  }
+
+  await showSeg(seg);
   refresh('first');
 
   nextBtn.addEventListener('click', async () => {
@@ -1291,7 +1437,9 @@ async function viewKnit(id) {
     const res = nextRow(part);
     part.progress.touched = true;
     await save();
-    refresh(true);
+    const moved = await followSeg();
+    refresh(moved ? 'first' : true);
+    const movedTxt = moved ? ` · <b>${moved}쪽</b> 차트로 넘어왔어요` : '';
     if (res === 'finished') {
       if (nextPart) {
         const yes = await dialog({
@@ -1304,7 +1452,7 @@ async function viewKnit(id) {
         toast(`<b>${esc(part.name)}</b>${eul(part.name)} 다 떴습니다`, { action: '취소', onAction: () => restore(snap) });
       }
     } else {
-      toast(`<b>${part.progress.row}단</b>으로 넘어갔습니다${res === 'repeat' ? ` · 반복 ${part.progress.rep}회차` : ''}`,
+      toast(`<b>${part.progress.row}단</b>으로 넘어갔습니다${res === 'repeat' ? ` · 반복 ${part.progress.rep}회차` : ''}${movedTxt}`,
         { action: '취소', onAction: () => restore(snap) });
     }
   });
@@ -1312,16 +1460,19 @@ async function viewKnit(id) {
     if (!prevRow(part)) { toast('첫 단입니다'); return; }
     part.progress.touched = true;
     await save();
-    refresh(true);
+    const moved = await followSeg();
+    refresh(moved ? 'first' : true);
+    if (moved) toast(`<b>${moved}쪽</b> 차트로 돌아왔어요`);
   });
   rowcard.addEventListener('click', async () => {
-    const r = await keypad(R, p().row);
+    const r = await keypad(RR, p().row);
     if (r === null || r === undefined) return;
     const snap = snapshot();
     jumpTo(part, r);
     part.progress.touched = true;
     await save();
-    refresh(true);
+    const moved = await followSeg();
+    refresh(moved ? 'first' : true);
     toast(`<b>${r}단</b>으로 이동했습니다`, { action: '취소', onAction: () => restore(snap) });
   });
   app.querySelector('#sw').addEventListener('click', async () => {
@@ -1351,23 +1502,34 @@ async function viewKnit(id) {
 }
 
 // ---------- 글 설명 파트: 설명 영역과 목표 단수 ----------
-async function viewTextSetup(id) {
+async function viewTextSetup(id, segStr) {
   const part = await db.get('parts', id);
   if (!part) return go('#/');
   const proj = await db.get('projects', part.projectId);
   const doc = await loadPdf(proj.fileId);
-  part.text = part.text || { area: null, goal: null };
+  part.text = part.text || { goal: null };
+  const segs = segsOf(part);
+  const si = clamp(+(segStr || 0), 0, segs.length - 1);
+  const sg = segs[si];
+  const last = si === segs.length - 1;
+  const page = sg.page;
   // 영역을 따로 안 그려도 넘어갈 수 있게 처음에는 페이지 전체로 둔다
-  let A = part.text.area ? { ...part.text.area } : { x: 0.03, y: 0.03, w: 0.94, h: 0.94 };
-  app.innerHTML = `${header(`#/p/${proj.id}`, part.name, `글 설명 · ${part.page}쪽`)}
-    <p class="lead">뜨면서 볼 <b>설명 부분을 사각형으로</b> 감싸주세요. 그대로 두면 페이지 전체를 봅니다.</p>
+  let A = sg.area ? { ...sg.area } : { x: 0.03, y: 0.03, w: 0.94, h: 0.94 };
+  const back = si > 0 ? `#/txt/${id}/${si - 1}` : `#/p/${proj.id}`;
+  app.innerHTML = `${header(back, part.name, `글 설명 · ${page}쪽${segs.length > 1 ? ` · 구간 ${si + 1}/${segs.length}` : ''}`)}
+    ${segChips(part, si, (x) => !!x.area)}
+    <p class="lead">${segs.length > 1
+      ? `${page}쪽에서 <b>이 파트에 해당하는 설명만</b> 사각형으로 감싸주세요. 같은 페이지의 나머지는 다른 파트가 쓸 수 있습니다.`
+      : '뜨면서 볼 <b>설명 부분을 사각형으로</b> 감싸주세요. 그대로 두면 페이지 전체를 봅니다.'}</p>
     <div class="pv-box" id="pv"></div>
-    <div class="pin-row"><div class="pin-col">
+    ${last ? `<div class="pin-row"><div class="pin-col">
       <label for="goal" class="label">목표 단수 (선택)</label>
       <div class="suffix"><input id="goal" class="input num" inputmode="numeric" placeholder="정해진 단수가 없으면 비워두세요" value="${part.text.goal ?? ''}"><span>단</span></div>
-    </div></div>
-    <button type="button" class="link-btn" id="pg">페이지 바꾸기 (${part.page}쪽)</button>
-    <div class="footer"><button type="button" class="btn" id="list">저장하고 목록으로</button><button type="button" class="btn primary" id="start">완료하고 뜨기 시작</button></div>`;
+    </div></div>` : ''}
+    <button type="button" class="link-btn" id="pg">페이지 바꾸기 (${page}쪽)</button>
+    <div class="footer"><button type="button" class="btn" id="list">저장하고 목록으로</button>${last
+      ? '<button type="button" class="btn primary" id="start">완료하고 뜨기 시작</button>'
+      : `<button type="button" class="btn primary" id="start">다음 구간 (${segs[si + 1].page}쪽)</button>`}</div>`;
   const box = app.querySelector('#pv');
   box.innerHTML = '<div class="pv-stage"><canvas></canvas><div class="pv-rect"><i class="h tl"></i><i class="h tr"></i><i class="h bl"></i><i class="h br"></i></div></div>';
   const stage = box.querySelector('.pv-stage');
@@ -1375,13 +1537,13 @@ async function viewTextSetup(id) {
   let W = 0, H = 0;
   const draw = () => Object.assign(rect.style, { left: A.x * W + 'px', top: A.y * H + 'px', width: A.w * W + 'px', height: A.h * H + 'px' });
   const layout = async () => {
-    const sz = await pageSize(doc, part.page);
+    const sz = await pageSize(doc, page);
     const cssW = Math.min(box.clientWidth - 2, ((box.clientHeight - 2) * sz.w) / sz.h);
     W = cssW;
     H = (cssW * sz.h) / sz.w;
     stage.style.width = W + 'px';
     stage.style.height = H + 'px';
-    await renderPage(doc, part.page, stage.querySelector('canvas'), cssW);
+    await renderPage(doc, page, stage.querySelector('canvas'), cssW);
     draw();
   };
   await layout();
@@ -1411,20 +1573,25 @@ async function viewTextSetup(id) {
   stage.addEventListener('pointerup', up);
   stage.addEventListener('pointercancel', up);
   const finish = async (dest) => {
-    const g = parseInt(app.querySelector('#goal').value.replace(/\D/g, ''), 10);
-    part.text = { area: A, goal: Number.isFinite(g) && g > 0 ? g : null };
+    sg.area = A;
+    const gi = app.querySelector('#goal');
+    if (gi) {
+      const g = parseInt(gi.value.replace(/\D/g, ''), 10);
+      part.text.goal = Number.isFinite(g) && g > 0 ? g : null;
+    }
     part.kind = 'text';
     if (!part.progress) part.progress = { row: 1, line: null, done: false };
+    part.updated = Date.now();
     await db.put('parts', part);
     go(dest);
   };
   app.querySelector('#list').addEventListener('click', () => finish(`#/p/${proj.id}`));
-  app.querySelector('#start').addEventListener('click', () => finish(`#/k/${part.id}`));
+  app.querySelector('#start').addEventListener('click', () => finish(last ? `#/k/${part.id}` : `#/txt/${part.id}/${si + 1}`));
   app.querySelector('#pg').addEventListener('click', async () => {
-    const v = await sheet('설명이 있는 페이지', Array.from({ length: doc.numPages }, (_, i) => ({ label: `${i + 1}쪽`, value: i + 1, current: i + 1 === part.page })));
-    if (!v || v === part.page) return;
-    part.page = v;
-    part.text.area = null;
+    const v = await sheet('설명이 있는 페이지', Array.from({ length: doc.numPages }, (_, i) => ({ label: `${i + 1}쪽`, value: i + 1, current: i + 1 === page })));
+    if (!v || v === page) return;
+    sg.page = v;
+    sg.area = null;
     await db.put('parts', part);
     route();
   });
@@ -1502,9 +1669,9 @@ async function viewTextKnit(part) {
   const snapshot = () => JSON.stringify(part.progress);
   const restore = async (s) => { part.progress = JSON.parse(s); await save(); refresh(); };
 
-  const decorate = (v) => {
+  const decorate = (i, v) => {
     const L = p().line;
-    if (!L) return '';
+    if (!L || (L.seg ?? 0) !== i) return '';
     const [w] = v.size();
     const y1 = v.n2p(0, L.top)[1];
     const y2 = v.n2p(0, L.bot)[1];
@@ -1525,11 +1692,13 @@ async function viewTextKnit(part) {
   };
 
   const zKey = `knit.textScale.${id}`;
-  const cv = new ChartView(app.querySelector('#chart'), {
-    doc, pageNum: part.page, area: part.text.area, decorate,
-    onScale: (s) => { try { localStorage.setItem(zKey, String(s)); } catch {} },
-    onTap: async (nx, ny) => {
-      const lines = await linesP;
+  const segs = segsOf(part);
+  let linesP = null;
+  const cv = new StackView(app.querySelector('#chart'), {
+    doc, pieces: segs.map((sg) => ({ page: sg.page, area: sg.area })), decorate,
+    onScale: (sc) => { try { localStorage.setItem(zKey, String(sc)); } catch {} },
+    onTap: async (i, nx, ny) => {
+      const lines = (await linesP)[i] || [];
       let L = null;
       if (lines.length) {
         let bd = Infinity;
@@ -1541,7 +1710,7 @@ async function viewTextKnit(part) {
       }
       if (!L) L = { top: ny - 0.008, bot: ny + 0.008 };
       const cur = p().line;
-      p().line = cur && Math.abs(cur.top - L.top) < 0.002 ? null : { top: L.top, bot: L.bot };
+      p().line = cur && (cur.seg ?? 0) === i && Math.abs(cur.top - L.top) < 0.002 ? null : { seg: i, top: L.top, bot: L.bot };
       await save();
       refresh();
     },
@@ -1551,16 +1720,17 @@ async function viewTextKnit(part) {
   let saved = 0;
   try { saved = +localStorage.getItem(zKey) || 0; } catch {}
   await cv.init(saved || undefined);
-  const linesP = readTextLines(cv.page, part.text.area);
+  linesP = Promise.all(cv.pieces.map((pc) => readTextLines(pc.page, pc.area)));
   if (!saved) {
     // 처음 열 때는 글자가 읽힐 만큼(줄 높이 약 15px) 확대해서 시작한다
-    const lines = await linesP;
+    const lines = (await linesP)[0];
     const hs = lines.map((l) => l.bot - l.top).sort((a, b) => a - b);
     const h = hs[Math.floor(hs.length / 2)];
-    if (h) cv.setScale(Math.max(cv.s, 15 / (h * cv.H1)));
+    if (h) cv.setScale(Math.max(cv.s, 15 / (h * cv.pieces[0].H1)));
   }
   const L0 = p().line;
-  cv.scrollTo(part.text.area.x, L0 ? L0.top : part.text.area.y, { x: 'start', yFrac: L0 ? 0.35 : 0 });
+  const s0 = L0 ? clamp(L0.seg ?? 0, 0, segs.length - 1) : 0;
+  cv.scrollTo(s0, segs[s0].area.x, L0 ? L0.top : segs[0].area.y, { x: 'start', yFrac: L0 ? 0.35 : 0 });
   refresh();
 
   nextBtn.addEventListener('click', async () => {
