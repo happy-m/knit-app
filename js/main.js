@@ -8,7 +8,7 @@ import {
   repeatTotal, nextRow, prevRow, jumpTo, partStatus, isText,
 } from './knitting.js';
 
-const APP_VERSION = 18;
+const APP_VERSION = 19;
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -83,25 +83,37 @@ async function viewHome() {
     const parts = await db.partsOf(p.id);
     const done = parts.filter((x) => partStatus(x) === 'done').length;
     const cur = currentPart(p, parts);
-    let curHtml = '<span class="muted">아직 파트가 없습니다</span>';
+    const bits = [];
+    let pct = 0, center = '–', ringCls = 'is-empty', alert = false;
     if (cur) {
       const st = partStatus(cur);
-      const badge =
-        st === 'setup' ? '<span class="tag-red">격자 맞추기 필요</span>'
-        : st === 'done' ? `<span class="tag-done">${icon.check}완료</span>`
-        : isText(cur)
-          ? `<span class="num pill-hl">${cur.progress?.row ?? 1}단</span>${cur.text.goal ? `<span class="num muted">/ ${cur.text.goal}단</span>` : ''}`
-          : `<span class="num pill-hl">${cur.progress?.row ?? rowsOf(cur).lo}단</span><span class="num muted">/ ${rowsOf(cur).hi}단</span>`;
-      curHtml = `<span class="cur-name">${esc(cur.name)}</span>${badge}`;
+      bits.push(esc(cur.name));
+      if (st === 'setup') {
+        bits.push('<span class="red">' + (isText(cur) ? '영역 지정 필요' : '격자 맞추기 필요') + '</span>');
+        center = '!'; ringCls = 'is-alert'; alert = true;
+      } else if (st === 'done') {
+        bits.push('완료');
+        pct = 100; center = icon.check; ringCls = 'is-done';
+      } else {
+        const lo = isText(cur) ? 1 : rowsOf(cur).lo;
+        const hi = isText(cur) ? cur.text.goal : rowsOf(cur).hi;
+        const row = cur.progress?.row ?? lo;
+        bits.push(hi && hi < 9999 ? `${row} / ${hi}단` : `${row}단`);
+        if (hi && hi < 9999) pct = Math.max(0, Math.min(100, ((row - lo) / (hi - lo + 1)) * 100));
+        center = `${row}단`; ringCls = String(row).length > 2 ? 'is-long' : '';
+      }
+      bits.push(`파트 ${done}/${parts.length}`);
+    } else {
+      bits.push('파트를 추가하세요');
     }
-    const resume = cur ? partHref(cur) : `#/padd/${p.id}`;
-    cards.push(`<div class="card proj">
-      <div class="proj-head"><h2>${esc(p.name)}</h2>${p.size ? `<span class="muted">사이즈 ${esc(p.size)}</span>` : ''}</div>
-      <div class="proj-cur"><div class="label">지금 뜨는 파트</div><div class="cur-line">${curHtml}</div></div>
-      <div class="bar"><i style="width:${parts.length ? (done / parts.length) * 100 : 0}%"></i></div>
-      <div class="muted small">파트 ${parts.length}개 중 ${done}개 완료</div>
-      <a class="btn primary" href="${resume}">${cur ? '이어서 뜨기' : '파트 추가하기'}</a>
-      <a class="link-btn" href="#/p/${p.id}">파트 목록 보기</a>
+    if (p.size) bits.push(esc(p.size));
+    const resume = cur && !alert ? partHref(cur) : null;
+    cards.push(`<div class="card proj-row">
+      <a class="pr-main" href="#/p/${p.id}">
+        <span class="ring ${ringCls}" style="--p:${pct}%"><span>${center}</span></span>
+        <span class="pr-t"><b>${esc(p.name)}</b><span class="pr-sub">${bits.join(' · ')}</span></span>
+      </a>
+      ${resume ? `<a class="play" href="${resume}" aria-label="${esc(p.name)} 이어서 뜨기"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M4.5 2.5l9 5.5-9 5.5z" fill="currentColor"/></svg></a>` : ''}
     </div>`);
   }
   app.innerHTML = `
@@ -110,7 +122,7 @@ async function viewHome() {
     <div class="page"><div class="wrap">
       ${cards.join('')}
       <label class="empty-card"><input type="file" accept="application/pdf,.pdf" hidden>
-        <b>도안 PDF로 새 작품 만들기</b><span>파일 앱에서 PDF를 고르면 폰 안에 저장됩니다</span></label>
+        <b>${icon.plus}도안 PDF로 새 작품</b></label>
       <div class="card backup-card">
         <div class="label">백업</div>
         <p class="small muted">도안과 기록은 이 앱 안에만 저장돼서, 홈 화면 아이콘을 지우면 함께 지워집니다. 백업 파일을 '파일' 앱이나 iCloud Drive에 저장해 두면 다시 설치한 뒤 되살릴 수 있어요.</p>

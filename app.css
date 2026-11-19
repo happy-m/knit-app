@@ -283,3 +283,23 @@ select.input { appearance: none; -webkit-appearance: none; background: #fff url(
 input[type=date].input { -webkit-appearance: none; appearance: none; display: flex; align-items: center; color: var(--ink); }
 textarea.input.area { padding: 12px; min-height: 120px; line-height: 1.5; resize: vertical; font-family: inherit; }
 .rep-two > *, .rep-two .input { min-width: 0; }
+/* 첫 화면: 작품 한 줄 */
+.proj-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 10px; }
+.pr-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; padding: 2px; }
+.ring { --p: 0%; width: 56px; height: 56px; flex: none; border-radius: 50%; position: relative;
+  background: conic-gradient(var(--teal) var(--p), #ECEDE8 0); }
+.ring > span { position: absolute; inset: 6px; border-radius: 50%; background: #fff; display: grid; place-items: center;
+  font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; letter-spacing: -0.3px; }
+.ring.is-long > span { font-size: 12px; }
+.ring.is-empty > span { color: var(--sub); font-weight: 600; }
+.ring.is-alert { background: var(--mark); }
+.ring.is-alert > span { color: var(--mark); font-size: 20px; }
+.ring.is-done > span { color: var(--teal); }
+.ring.is-done > span svg { width: 22px; height: 22px; }
+.pr-t { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.pr-t b { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pr-sub { font-size: 13px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pr-sub .red { color: var(--mark); font-weight: 600; }
+.play { width: 46px; height: 46px; flex: none; border-radius: 50%; background: var(--ink); color: #fff; display: grid; place-items: center; }
+.play svg { margin-left: 2px; }
+.empty-card b { display: inline-flex; align-items: center; gap: 6px; }
