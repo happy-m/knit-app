@@ -8,7 +8,7 @@ import {
   repeatTotal, nextRow, prevRow, jumpTo, partStatus, isText,
 } from './knitting.js';
 
-const APP_VERSION = 17;
+const APP_VERSION = 18;
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -26,6 +26,7 @@ const routes = [
   [/^#\/cal\/([\w-]+)\/([1-4])$/, viewCal],
   [/^#\/k\/([\w-]+)$/, viewKnit],
   [/^#\/txt\/([\w-]+)$/, viewTextSetup],
+  [/^#\/info\/([\w-]+)$/, viewInfo],
 ];
 
 async function route() {
@@ -257,6 +258,7 @@ async function viewProject(pid) {
       `<button type="button" class="icon-btn" id="pmore" aria-label="작품 설정">${icon.more}</button>`)}
     <div class="page"><div class="wrap">
       <button type="button" class="btn" id="doc">도안 보기</button>
+      ${infoCard(proj)}
       <div class="label">뜨는 순서</div>
       ${rows.join('') || '<p class="hint">아직 파트가 없습니다. 뜨는 순서대로 파트를 추가하세요.</p>'}
       <a class="btn dashed" href="#/padd/${pid}">${icon.plus}파트 추가</a>
@@ -267,8 +269,10 @@ async function viewProject(pid) {
     const v = await sheet(proj.name, [
       { label: '작품 이름 바꾸기', value: 'rename' },
       { label: '사이즈 바꾸기', value: 'size' },
+      { label: '작품 정보 (실·바늘·게이지·날짜·메모)', value: 'info' },
       { label: '작품 삭제', value: 'delete', danger: true },
     ]);
+    if (v === 'info') return go(`#/info/${proj.id}`);
     if (v === 'rename') {
       const n = await ask('작품 이름', proj.name);
       if (n) { proj.name = n; await db.put('projects', proj); route(); }
@@ -289,6 +293,132 @@ async function viewProject(pid) {
       go('#/');
     }
   });
+}
+
+// ---------- 작품 정보 ----------
+const NEEDLE_KINDS = ['줄바늘', '막대바늘', '장갑바늘', '코바늘', '기타'];
+
+function fmtDate(d) {
+  return d ? d.replace(/^(\d{4})-(\d{2})-(\d{2})$/, (_, y, m, dd) => `${y}.${+m}.${+dd}`) : '';
+}
+
+function infoLines(info) {
+  if (!info) return [];
+  const out = [];
+  const yarns = (info.yarns || []).filter((y) => y.name || y.color || y.amount);
+  if (yarns.length) out.push(['실', yarns.map((y) => [y.name, y.color, y.amount].filter(Boolean).map(esc).join(' · ')).join('<br>')]);
+  const needles = (info.needles || []).filter((n) => n.mm || n.note);
+  if (needles.length) out.push(['바늘', needles.map((n) => [n.kind, n.mm ? `${n.mm}mm` : '', n.note].filter(Boolean).map(esc).join(' · ')).join('<br>')]);
+  const g = info.gauge || {};
+  if (g.sts || g.rows) out.push(['게이지', `${esc(g.sts || '?')}코 × ${esc(g.rows || '?')}단 <span class="muted">(10cm)</span>${g.note ? ` · ${esc(g.note)}` : ''}`]);
+  if (info.start || info.end) out.push(['기간', `${fmtDate(info.start) || '?'} ~ ${fmtDate(info.end) || '뜨는 중'}`]);
+  if (info.memo) out.push(['메모', esc(info.memo).replace(/\n/g, '<br>')]);
+  return out;
+}
+
+function infoCard(proj) {
+  const lines = infoLines(proj.info);
+  if (!lines.length) {
+    return `<a class="btn dashed" href="#/info/${proj.id}">${icon.plus}작품 정보 적기 (실·바늘·게이지·날짜·메모)</a>`;
+  }
+  return `<a class="card info-card" href="#/info/${proj.id}">
+    <div class="info-head"><span class="label">작품 정보</span><span class="small muted">고치기</span></div>
+    <dl class="info-dl">${lines.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl></a>`;
+}
+
+async function viewInfo(pid) {
+  const proj = await db.get('projects', pid);
+  if (!proj) return go('#/');
+  const info = proj.info || {};
+  info.yarns = info.yarns?.length ? info.yarns : [{}];
+  info.needles = info.needles?.length ? info.needles : [{ kind: '줄바늘' }];
+  info.gauge = info.gauge || {};
+  const yarnRow = (y, i) => `<div class="rep-row" data-i="${i}">
+      <input class="input" data-k="name" placeholder="실 이름 (예: 메리노 울)" value="${esc(y.name || '')}" autocomplete="off">
+      <div class="rep-two"><input class="input" data-k="color" placeholder="색·로트" value="${esc(y.color || '')}" autocomplete="off">
+      <input class="input" data-k="amount" placeholder="양 (예: 5볼)" value="${esc(y.amount || '')}" autocomplete="off"></div>
+      ${i > 0 ? `<button type="button" class="link-btn rm" data-rm="yarns">이 실 지우기</button>` : ''}</div>`;
+  const needleRow = (n, i) => `<div class="rep-row" data-i="${i}"><div class="rep-two">
+      <select class="input" data-k="kind">${NEEDLE_KINDS.map((k) => `<option${k === n.kind ? ' selected' : ''}>${k}</option>`).join('')}</select>
+      <input class="input" data-k="mm" inputmode="decimal" placeholder="굵기 mm" value="${esc(n.mm || '')}" autocomplete="off"></div>
+      <input class="input" data-k="note" placeholder="용도 (예: 고무단, 몸판 · 80cm)" value="${esc(n.note || '')}" autocomplete="off">
+      ${i > 0 ? `<button type="button" class="link-btn rm" data-rm="needles">이 바늘 지우기</button>` : ''}</div>`;
+  const render = () => {
+    app.innerHTML = `${header(`#/p/${pid}`, '작품 정보', esc(proj.name))}
+    <div class="page"><form class="wrap" id="f">
+      <div class="label">실</div>
+      <div id="yarns">${info.yarns.map(yarnRow).join('')}</div>
+      <button type="button" class="btn dashed" data-add="yarns">${icon.plus}실 추가</button>
+      <div class="label">바늘</div>
+      <div id="needles">${info.needles.map(needleRow).join('')}</div>
+      <button type="button" class="btn dashed" data-add="needles">${icon.plus}바늘 추가</button>
+      <div class="label">게이지 <span class="muted small">(10cm × 10cm)</span></div>
+      <div class="rep-two">
+        <div class="field"><label for="g-sts">코</label><input id="g-sts" class="input" inputmode="decimal" value="${esc(info.gauge.sts || '')}"></div>
+        <div class="field"><label for="g-rows">단</label><input id="g-rows" class="input" inputmode="decimal" value="${esc(info.gauge.rows || '')}"></div>
+      </div>
+      <input id="g-note" class="input" placeholder="무늬·바늘 (예: 메리야스, 4mm)" value="${esc(info.gauge.note || '')}" autocomplete="off">
+      <div class="label">기간</div>
+      <div class="rep-two">
+        <div class="field"><label for="d-start">시작한 날</label><input id="d-start" class="input" type="date" value="${esc(info.start || '')}"></div>
+        <div class="field"><label for="d-end">완성한 날</label><input id="d-end" class="input" type="date" value="${esc(info.end || '')}"></div>
+      </div>
+      <div class="label">메모</div>
+      <textarea id="memo" class="input area" rows="5" placeholder="수정한 점, 실 남은 양, 다음에 참고할 것…">${esc(info.memo || '')}</textarea>
+      <p class="hint center">적는 대로 바로 저장됩니다.</p>
+    </form></div>`;
+    bind();
+  };
+  const collect = () => {
+    for (const key of ['yarns', 'needles']) {
+      app.querySelectorAll(`#${key} .rep-row`).forEach((row) => {
+        const o = info[key][+row.dataset.i];
+        row.querySelectorAll('[data-k]').forEach((el) => { o[el.dataset.k] = el.value.trim(); });
+      });
+    }
+    const v = (id) => app.querySelector(id).value.trim();
+    info.gauge = { sts: v('#g-sts'), rows: v('#g-rows'), note: v('#g-note') };
+    info.start = v('#d-start');
+    info.end = v('#d-end');
+    info.memo = app.querySelector('#memo').value.replace(/\s+$/, '');
+  };
+  let t;
+  const save = async () => {
+    collect();
+    const clean = {
+      ...info,
+      yarns: info.yarns.filter((y) => y.name || y.color || y.amount),
+      needles: info.needles.filter((n) => n.mm || n.note),
+    };
+    const fresh = await db.get('projects', pid);
+    fresh.info = clean;
+    fresh.updated = Date.now();
+    await db.put('projects', fresh);
+  };
+  const bind = () => {
+    const f = app.querySelector('#f');
+    f.addEventListener('submit', (e) => e.preventDefault());
+    f.addEventListener('input', () => { clearTimeout(t); t = setTimeout(save, 400); });
+    f.addEventListener('change', save);
+    f.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', async () => {
+      collect();
+      const key = b.dataset.add;
+      const last = info[key][info[key].length - 1] || {};
+      info[key].push(key === 'needles' ? { kind: last.kind || '줄바늘' } : {});
+      await save();
+      render();
+      const rows = app.querySelectorAll(`#${key} .rep-row`);
+      rows[rows.length - 1].querySelector('input')?.focus();
+    }));
+    f.querySelectorAll('[data-rm]').forEach((b) => b.addEventListener('click', async () => {
+      collect();
+      info[b.dataset.rm].splice(+b.closest('.rep-row').dataset.i, 1);
+      await save();
+      render();
+    }));
+  };
+  cleanups.push(() => { if (app.querySelector('#f')) { clearTimeout(t); save(); } });
+  render();
 }
 
 async function partActions(id, proj, parts) {
