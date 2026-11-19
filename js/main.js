@@ -8,7 +8,7 @@ import {
   repeatTotal, nextRow, prevRow, jumpTo, partStatus, isText,
 } from './knitting.js';
 
-const APP_VERSION = 19;
+const APP_VERSION = '1.9.0';
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -131,7 +131,7 @@ async function viewHome() {
           <label class="btn">백업 가져오기<input type="file" id="bk-in" hidden></label>
         </div>
       </div>
-      <p class="hint center">버전 ${APP_VERSION}</p>
+      <p class="hint center">v${APP_VERSION}</p>
     </div></div>`;
   app.querySelector('#bk-out').addEventListener('click', exportBackup);
   const bkIn = app.querySelector('#bk-in');
