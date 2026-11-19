@@ -8,7 +8,7 @@ import {
   repeatTotal, nextRow, prevRow, jumpTo, partStatus, isText,
 } from './knitting.js';
 
-const APP_VERSION = 16;
+const APP_VERSION = 17;
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -1588,5 +1588,9 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').then((r) => r.update()).catch(() => {});
 }
 navigator.storage?.persist?.().catch(() => {});
+// iOS: 화면 전체가 핀치·더블탭으로 확대되지 않게 막는다 (차트는 자체 확대 사용)
+for (const t of ['gesturestart', 'gesturechange', 'dblclick']) document.addEventListener(t, (e) => e.preventDefault(), { passive: false });
 route();
 navigator.storage?.persist?.().catch(() => {});
+// iOS: 화면 전체가 핀치·더블탭으로 확대되지 않게 막는다 (차트는 자체 확대 사용)
+for (const t of ['gesturestart', 'gesturechange', 'dblclick']) document.addEventListener(t, (e) => e.preventDefault(), { passive: false });
