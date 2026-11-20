@@ -368,3 +368,5 @@ textarea.input.area { padding: 12px; min-height: 120px; line-height: 1.5; resize
 .rc-memo { font-size: 12px; font-weight: 700; color: var(--mark); }
 .rc-memo.soft { color: var(--sub); font-weight: 500; }
 .dialog textarea.input.area { min-height: 110px; margin: 4px 0 12px; }
+.memo-row { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; font-weight: 700; }
+.memo-row .input { width: 96px; text-align: center; font-size: 20px; }

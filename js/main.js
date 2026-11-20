@@ -11,7 +11,7 @@ import {
 import { StackView } from './stackview.js';
 import { readSizeGroups, findSizeInfo } from './sizes.js';
 
-const APP_VERSION = '1.13.0';
+const APP_VERSION = '1.13.1';
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -537,7 +537,7 @@ async function partActions(id, proj, parts) {
   const v = await sheet(part.name, [
     { label: isText(part) ? '설명 영역·목표 단수 고치기' : '격자 다시 맞추기', value: 'cal' },
     { label: '이름·형태·페이지 고치기', value: 'edit' },
-    ...(memosOf(part).length ? [{ label: `단 메모 보기 (${memosOf(part).length}개)`, value: 'memos' }] : []),
+    { label: memosOf(part).length ? `단 메모 (${memosOf(part).length}개)` : '단 메모 달기', value: 'memos' },
     { label: '복제 (왼팔·오른팔처럼 같은 차트를 한 번 더)', value: 'dup' },
     ...(i > 0 ? [{ label: '위로 옮기기', value: 'up' }] : []),
     ...(i < parts.length - 1 ? [{ label: '아래로 옮기기', value: 'down' }] : []),
@@ -547,7 +547,7 @@ async function partActions(id, proj, parts) {
   if (!v) return;
   if (v === 'cal') return go(isText(part) ? `#/txt/${id}/0` : calUrl(id, 1, 0));
   if (v === 'edit') return go(`#/pedit/${id}`);
-  if (v === 'memos') { await memoList(part, false); return route(); }
+  if (v === 'memos') { await memoList(part, false, part.progress?.row || 1); return route(); }
   if (v === 'dup') {
     const n = await ask('새 파트 이름', part.name + ' 2', { label: '같은 격자 설정을 쓰고, 진행 위치는 처음부터 시작합니다' });
     if (!n) return;
@@ -1588,7 +1588,7 @@ async function viewKnit(id) {
     const act = await rowMenu(part, p().row);
     let r;
     if (act === 'memo') { if (await editMemo(part, p().row)) refresh(false); return; }
-    if (act === 'list') r = await memoList(part, true);
+    if (act === 'list') r = await memoList(part, true, p().row);
     else if (act === 'jump') r = await keypad(RR, p().row);
     if (r === null || r === undefined) return;
     const snap = snapshot();
@@ -1939,7 +1939,7 @@ async function viewTextKnit(part) {
     const act = await rowMenu(part, p().row);
     let r;
     if (act === 'memo') { if (await editMemo(part, p().row)) refresh(); return; }
-    if (act === 'list') r = await memoList(part, true);
+    if (act === 'list') r = await memoList(part, true, p().row);
     else if (act === 'jump') r = await keypad(R, p().row);
     if (r === null || r === undefined) return;
     const snap = snapshot();
@@ -2030,54 +2030,69 @@ const memosOf = (part) => (Array.isArray(part.memos) ? part.memos : (part.memos 
 const memoAt = (part, row) => memosOf(part).find((m) => m.row === row);
 const nextMemo = (part, row) => memosOf(part).filter((m) => m.row > row).sort((a, b) => a.row - b.row)[0];
 
-// 메모 쓰기 창. {text} 저장, {del:true} 삭제, null 취소
-function memoDialog(row, text = '') {
+// 메모 쓰기 창. 단 번호도 여기서 바로 적는다. {row, text} 저장, {del:true} 삭제, null 취소
+function memoDialog(part, row) {
   return new Promise((resolve) => {
+    const orig = memoAt(part, row);
     const el = document.createElement('div');
     el.className = 'scrim';
     el.innerHTML = `<form class="dialog" role="dialog" aria-modal="true">
-      <div class="dialog-title">${row}단 메모</div>
-      <textarea class="input area" id="memo-in" rows="4" placeholder="예: 여기서 목 라인 시작 · 양쪽 1코씩 줄임">${esc(text)}</textarea>
-      <div class="dialog-btns">${text ? '<button type="button" class="btn danger" data-del>삭제</button>' : ''}<button type="button" class="btn" data-x>취소</button><button class="btn primary">저장</button></div></form>`;
+      <div class="dialog-title">단 메모</div>
+      <div class="memo-row"><input class="input num" id="memo-row" inputmode="numeric" value="${row}" aria-label="단 번호"><span>단에</span></div>
+      <textarea class="input area" id="memo-in" rows="4" placeholder="예: 여기서 목 라인 시작 · 양쪽 1코씩 줄임">${esc(orig?.text || '')}</textarea>
+      <div class="dialog-btns"><button type="button" class="btn danger" data-del ${orig ? '' : 'hidden'}>삭제</button><button type="button" class="btn" data-x>취소</button><button class="btn primary">저장</button></div></form>`;
+    const rowIn = el.querySelector('#memo-row');
+    const txt = el.querySelector('#memo-in');
+    let typed = false;
+    txt.addEventListener('input', () => { typed = true; });
+    // 단 번호를 바꾸면 그 단의 기존 메모를 불러온다 (아직 아무것도 안 적었을 때)
+    const cur = () => parseInt(rowIn.value.replace(/\D/g, ''), 10);
+    rowIn.addEventListener('input', () => {
+      const m = memoAt(part, cur());
+      if (!typed) txt.value = m?.text || '';
+      el.querySelector('[data-del]').hidden = !m;
+    });
     const done = (v) => { el.remove(); resolve(v); };
     el.querySelector('form').addEventListener('submit', (e) => {
       e.preventDefault();
-      const v = el.querySelector('#memo-in').value.trim();
-      done(v ? { text: v } : text ? { del: true } : null);
+      const r = cur();
+      if (!Number.isInteger(r) || r < 1) { rowIn.focus(); toast('단 번호를 적어주세요'); return; }
+      const v = txt.value.trim();
+      done(v ? { row: r, text: v } : memoAt(part, r) ? { row: r, del: true } : null);
     });
     el.querySelector('[data-x]').addEventListener('click', () => done(null));
-    el.querySelector('[data-del]')?.addEventListener('click', () => done({ del: true }));
+    el.querySelector('[data-del]').addEventListener('click', () => done({ row: cur(), del: true }));
     document.getElementById('layer').appendChild(el);
-    setTimeout(() => el.querySelector('#memo-in').focus(), 50);
+    setTimeout(() => txt.focus(), 50);
   });
 }
 
-// 메모 달기·고치기. 바뀌었으면 true
+// 메모 달기·고치기 (row는 처음에 채워 둘 단 번호). 바뀌었으면 true
 async function editMemo(part, row) {
-  const m = memoAt(part, row);
-  const r = await memoDialog(row, m?.text || '');
+  const r = await memoDialog(part, row);
   if (!r) return false;
-  const list = memosOf(part);
-  if (r.del) part.memos = list.filter((x) => x !== m);
+  const m = memoAt(part, r.row);
+  if (r.del) part.memos = memosOf(part).filter((x) => x !== m);
   else if (m) m.text = r.text;
-  else list.push({ row, text: r.text });
+  else memosOf(part).push({ row: r.row, text: r.text });
   part.memos.sort((a, b) => a.row - b.row);
   part.updated = Date.now();
   await db.put('parts', part);
-  toast(r.del ? `${row}단 메모를 지웠습니다` : `${row}단에 메모를 달았습니다`);
+  toast(r.del ? `${r.row}단 메모를 지웠습니다` : `${r.row}단 메모를 저장했습니다`);
   return true;
 }
 
-// 메모 목록. 고른 메모의 단 번호를 돌려준다 (canJump면 이동/고치기 중 고르기)
-async function memoList(part, canJump) {
+// 메모 목록. canJump면 고른 메모의 단으로 이동할지도 묻고, 이동할 단 번호를 돌려준다
+async function memoList(part, canJump, curRow = 1) {
   const list = memosOf(part).slice().sort((a, b) => a.row - b.row);
-  if (!list.length) { toast('아직 메모가 없습니다. 단 카드를 눌러 메모를 달 수 있어요.'); return null; }
-  const row = await sheet(`${part.name} · 단 메모 ${list.length}개`, list.map((m) => ({
-    label: `${m.row}단`, sub: esc(m.text.length > 40 ? m.text.slice(0, 40) + '…' : m.text), value: m.row,
-  })));
+  const row = await sheet(`${part.name} · 단 메모 ${list.length}개`, [
+    { label: '+ 새 메모', value: 'new' },
+    ...list.map((m) => ({ label: `${m.row}단`, sub: esc(m.text.length > 40 ? m.text.slice(0, 40) + '…' : m.text), value: m.row })),
+  ]);
   if (row === undefined) return null;
+  if (row === 'new') { await editMemo(part, curRow); return null; }
   if (!canJump) { await editMemo(part, row); return null; }
-  const v = await sheet(`${row}단 메모`, [{ label: '이 단으로 이동', value: 'jump' }, { label: '메모 고치기', value: 'edit' }]);
+  const v = await sheet(`${row}단 메모`, [{ label: '메모 고치기', value: 'edit' }, { label: '이 단으로 이동', value: 'jump' }]);
   if (v === 'edit') { await editMemo(part, row); return null; }
   return v === 'jump' ? row : null;
 }
@@ -2087,7 +2102,7 @@ async function rowMenu(part, row) {
   const n = memosOf(part).length;
   return sheet(`지금 ${row}단`, [
     { label: '다른 단으로 이동 (번호 입력)', value: 'jump' },
-    { label: memoAt(part, row) ? `${row}단 메모 고치기` : `${row}단에 메모 달기`, value: 'memo' },
+    { label: '메모 달기 (단 번호를 적어서)', value: 'memo' },
     ...(n ? [{ label: `메모 전체 보기 (${n}개)`, value: 'list' }] : []),
   ]);
 }
