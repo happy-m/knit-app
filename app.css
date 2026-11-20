@@ -356,3 +356,15 @@ textarea.input.area { padding: 12px; min-height: 120px; line-height: 1.5; resize
 .k-top .ps-name, .k-top .ps-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .k-top > .btn, .k-top .sz-chip { flex: none; padding: 0 11px; min-height: 44px; }
 .k-top .k-spacer { min-width: 0; }
+/* 단 메모 */
+.memo-card { margin: 8px 12px 0; padding: 10px 14px; border: 2px solid var(--mark); border-radius: 12px; background: #fff; text-align: left;
+  display: flex; flex-direction: column; gap: 2px; color: var(--ink); font-size: 15px; line-height: 1.45; flex: none; max-height: 30vh; overflow: auto; }
+.memo-card[hidden] { display: none; }
+.memo-card b { color: var(--mark); font-size: 13px; }
+.memo-card.pop { animation: memo-pop 0.9s ease; }
+@keyframes memo-pop { 0% { transform: scale(0.96); background: #FDE7EA; } 60% { background: #FDE7EA; } 100% { transform: none; background: #fff; } }
+.cv-ov .memo-dot { width: 22px; height: 22px; margin-top: -11px; border-radius: 50%; background: var(--mark); color: #fff; font-size: 12px;
+  display: grid; place-items: center; font-weight: 800; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+.rc-memo { font-size: 12px; font-weight: 700; color: var(--mark); }
+.rc-memo.soft { color: var(--sub); font-weight: 500; }
+.dialog textarea.input.area { min-height: 110px; margin: 4px 0 12px; }

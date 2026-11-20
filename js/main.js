@@ -11,7 +11,7 @@ import {
 import { StackView } from './stackview.js';
 import { readSizeGroups, findSizeInfo } from './sizes.js';
 
-const APP_VERSION = '1.12.0';
+const APP_VERSION = '1.13.0';
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -537,6 +537,7 @@ async function partActions(id, proj, parts) {
   const v = await sheet(part.name, [
     { label: isText(part) ? '설명 영역·목표 단수 고치기' : '격자 다시 맞추기', value: 'cal' },
     { label: '이름·형태·페이지 고치기', value: 'edit' },
+    ...(memosOf(part).length ? [{ label: `단 메모 보기 (${memosOf(part).length}개)`, value: 'memos' }] : []),
     { label: '복제 (왼팔·오른팔처럼 같은 차트를 한 번 더)', value: 'dup' },
     ...(i > 0 ? [{ label: '위로 옮기기', value: 'up' }] : []),
     ...(i < parts.length - 1 ? [{ label: '아래로 옮기기', value: 'down' }] : []),
@@ -546,6 +547,7 @@ async function partActions(id, proj, parts) {
   if (!v) return;
   if (v === 'cal') return go(isText(part) ? `#/txt/${id}/0` : calUrl(id, 1, 0));
   if (v === 'edit') return go(`#/pedit/${id}`);
+  if (v === 'memos') { await memoList(part, false); return route(); }
   if (v === 'dup') {
     const n = await ask('새 파트 이름', part.name + ' 2', { label: '같은 격자 설정을 쓰고, 진행 위치는 처음부터 시작합니다' });
     if (!n) return;
@@ -1371,6 +1373,7 @@ async function viewKnit(id) {
       </div>
       ${segs.length > 1 ? '<div class="seg-chips k-segs" id="segs"></div>' : ''}
       <div class="k-chart" id="chart"></div>
+      <button type="button" class="memo-card" id="memocard" hidden></button>
     </div>
     <div class="k-ctrl">
       <button type="button" class="row-card" id="rowcard" aria-label="단 번호를 입력해 이동"></button>
@@ -1416,10 +1419,28 @@ async function viewKnit(id) {
         h += `<span class="mark-tag" style="left:${(x1 + x2) / 2}px;top:${y1}px">${pr.mark}번 칸</span>`;
       }
     }
+    // 메모가 있는 단은 왼쪽에 ✎ 표시
+    for (const m of memosOf(part)) {
+      if (m.row < R.lo || m.row > R.hi) continue;
+      const y = v.n2p(0, R.at(m.row))[1];
+      h += `<span class="memo-dot" style="left:4px;top:${y}px">✎</span><span class="memo-dot" style="left:${w - 26}px;top:${y}px">✎</span>`;
+    }
     return h;
   };
 
   const rowcard = app.querySelector('#rowcard');
+  const memoEl = app.querySelector('#memocard');
+  let memoShownFor = null;
+  const showMemo = (pr) => {
+    const h = memoCardHtml(part, pr);
+    memoEl.hidden = !h;
+    memoEl.innerHTML = h;
+    // 메모가 있는 단에 새로 오면 카드를 한 번 깜빡여 알린다
+    const key = h ? pr.row : null;
+    if (key !== null && key !== memoShownFor) { memoEl.classList.remove('pop'); void memoEl.offsetWidth; memoEl.classList.add('pop'); }
+    memoShownFor = key;
+  };
+  memoEl.addEventListener('click', async () => { if (await editMemo(part, p().row)) refresh(false); });
   const nextBtn = app.querySelector('#next');
   const prevBtn = app.querySelector('#prev');
   const dirEl = app.querySelector('#dir');
@@ -1431,12 +1452,14 @@ async function viewKnit(id) {
     const round = part.cal.mode.type === 'round';
     dirEl.innerHTML = pr.done ? `${icon.check}다 떴습니다`
       : `${rs ? icon.left : icon.right}${round ? '원통' : rs ? '겉면' : '안면'}<span class="dir-long"> · ${rs ? '왼쪽' : '오른쪽'}으로 읽기</span>`;
-    rowcard.innerHTML = `<span class="rc-top"><span>${pr.done ? '완료' : '지금'}</span><span class="rc-jump">${icon.edit}단 이동</span></span>
+    rowcard.innerHTML = `<span class="rc-top"><span>${pr.done ? '완료' : '지금'}</span><span class="rc-jump">${icon.edit}단 이동·메모</span></span>
       <span class="rc-num"><span class="num rc-big">${pr.row}</span><span class="rc-u">단</span><span class="num muted">/ ${RR.hi}</span></span>
       ${pr.done ? `<span class="tag-done">${icon.check}${esc(part.name)} 완료</span>`
         : pr.mark !== null && pr.mark !== undefined ? `<span class="rc-line"><i class="mk"></i>코 표시 <b class="num">${pr.mark}</b>번 칸</span>`
         : '<span class="rc-line muted">코 표시 없음</span>'}
-      ${total !== null ? `<span class="rc-line small">반복 <b class="num">${pr.rep}/${total || '∞'}</b>회차 · 처음부터 <b class="num">${knitIndex(part) + 1}</b>단째</span>` : ''}`;
+      ${total !== null ? `<span class="rc-line small">반복 <b class="num">${pr.rep}/${total || '∞'}</b>회차 · 처음부터 <b class="num">${knitIndex(part) + 1}</b>단째</span>` : ''}
+      ${memoHint(part, pr)}`;
+    showMemo(pr);
     nextBtn.disabled = !!pr.done;
     nextBtn.textContent = pr.done ? '다 떴습니다' : '다음 단';
     segBar?.querySelectorAll('[data-seg]').forEach((b) => {
@@ -1562,7 +1585,11 @@ async function viewKnit(id) {
     if (moved) toast(`<b>${moved}쪽</b> 차트로 돌아왔어요`);
   });
   rowcard.addEventListener('click', async () => {
-    const r = await keypad(RR, p().row);
+    const act = await rowMenu(part, p().row);
+    let r;
+    if (act === 'memo') { if (await editMemo(part, p().row)) refresh(false); return; }
+    if (act === 'list') r = await memoList(part, true);
+    else if (act === 'jump') r = await keypad(RR, p().row);
     if (r === null || r === undefined) return;
     const snap = snapshot();
     jumpTo(part, r);
@@ -1754,6 +1781,7 @@ async function viewTextKnit(part) {
         <button type="button" class="btn" id="docbtn">도안</button>
       </div>
       <div class="k-chart" id="chart"></div>
+      <button type="button" class="memo-card" id="memocard" hidden></button>
       <p class="hint pad k-hint">읽고 있는 줄을 탭하면 형광펜 띠가 옮겨갑니다.</p>
     </div>
     <div class="k-ctrl">
@@ -1795,14 +1823,28 @@ async function viewTextKnit(part) {
     return `<i class="band" style="left:0;top:${y1 - 2}px;width:${w}px;height:${y2 - y1 + 4}px"></i>` + h;
   };
   const rowcard = app.querySelector('#rowcard');
+  const memoEl = app.querySelector('#memocard');
+  let memoShownFor = null;
+  const showMemo = (pr) => {
+    const h = memoCardHtml(part, pr);
+    memoEl.hidden = !h;
+    memoEl.innerHTML = h;
+    // 메모가 있는 단에 새로 오면 카드를 한 번 깜빡여 알린다
+    const key = h ? pr.row : null;
+    if (key !== null && key !== memoShownFor) { memoEl.classList.remove('pop'); void memoEl.offsetWidth; memoEl.classList.add('pop'); }
+    memoShownFor = key;
+  };
+  memoEl.addEventListener('click', async () => { if (await editMemo(part, p().row)) refresh(false); });
   const nextBtn = app.querySelector('#next');
   const refresh = () => {
     const pr = p();
     const pct = goal ? Math.min(100, ((pr.done ? goal : pr.row - 1) / goal) * 100) : 0;
-    rowcard.innerHTML = `<span class="rc-top"><span>${pr.done ? '완료' : '지금 뜨는 단'}</span><span class="rc-jump">${icon.edit}단 이동</span></span>
+    rowcard.innerHTML = `<span class="rc-top"><span>${pr.done ? '완료' : '지금 뜨는 단'}</span><span class="rc-jump">${icon.edit}단 이동·메모</span></span>
       <span class="rc-num"><span class="num rc-big">${pr.row}</span><span class="rc-u">단</span>${goal ? `<span class="num muted">/ ${goal}</span>` : ''}</span>
       ${goal ? `<span class="bar"><i style="width:${pct}%"></i></span>` : ''}
-      <span class="rc-line small muted">${pr.done ? `${esc(part.name)} 완료` : `${pr.row > 1 ? `${pr.row - 1}단까지 떴습니다` : '첫 단을 뜨는 중'}${goal ? ` · 목표까지 ${Math.max(0, goal - pr.row + 1)}단` : ''}`}</span>`;
+      <span class="rc-line small muted">${pr.done ? `${esc(part.name)} 완료` : `${pr.row > 1 ? `${pr.row - 1}단까지 떴습니다` : '첫 단을 뜨는 중'}${goal ? ` · 목표까지 ${Math.max(0, goal - pr.row + 1)}단` : ''}`}</span>
+      ${memoHint(part, pr)}`;
+    showMemo(pr);
     nextBtn.disabled = !!pr.done;
     nextBtn.textContent = pr.done ? '다 떴습니다' : '다음 단';
     cv.redraw();
@@ -1894,7 +1936,11 @@ async function viewTextKnit(part) {
     refresh();
   });
   rowcard.addEventListener('click', async () => {
-    const r = await keypad(R, p().row);
+    const act = await rowMenu(part, p().row);
+    let r;
+    if (act === 'memo') { if (await editMemo(part, p().row)) refresh(); return; }
+    if (act === 'list') r = await memoList(part, true);
+    else if (act === 'jump') r = await keypad(R, p().row);
     if (r === null || r === undefined) return;
     const snap = snapshot();
     p().row = r;
@@ -1977,6 +2023,84 @@ function previewPage(doc, pageNum, pickLabel) {
     el.querySelectorAll('[data-x]').forEach((b) => b.addEventListener('click', () => done(false)));
     el.querySelector('[data-pick]').addEventListener('click', () => done(true));
   });
+}
+
+// ---------- 단 메모 ----------
+const memosOf = (part) => (Array.isArray(part.memos) ? part.memos : (part.memos = []));
+const memoAt = (part, row) => memosOf(part).find((m) => m.row === row);
+const nextMemo = (part, row) => memosOf(part).filter((m) => m.row > row).sort((a, b) => a.row - b.row)[0];
+
+// 메모 쓰기 창. {text} 저장, {del:true} 삭제, null 취소
+function memoDialog(row, text = '') {
+  return new Promise((resolve) => {
+    const el = document.createElement('div');
+    el.className = 'scrim';
+    el.innerHTML = `<form class="dialog" role="dialog" aria-modal="true">
+      <div class="dialog-title">${row}단 메모</div>
+      <textarea class="input area" id="memo-in" rows="4" placeholder="예: 여기서 목 라인 시작 · 양쪽 1코씩 줄임">${esc(text)}</textarea>
+      <div class="dialog-btns">${text ? '<button type="button" class="btn danger" data-del>삭제</button>' : ''}<button type="button" class="btn" data-x>취소</button><button class="btn primary">저장</button></div></form>`;
+    const done = (v) => { el.remove(); resolve(v); };
+    el.querySelector('form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const v = el.querySelector('#memo-in').value.trim();
+      done(v ? { text: v } : text ? { del: true } : null);
+    });
+    el.querySelector('[data-x]').addEventListener('click', () => done(null));
+    el.querySelector('[data-del]')?.addEventListener('click', () => done({ del: true }));
+    document.getElementById('layer').appendChild(el);
+    setTimeout(() => el.querySelector('#memo-in').focus(), 50);
+  });
+}
+
+// 메모 달기·고치기. 바뀌었으면 true
+async function editMemo(part, row) {
+  const m = memoAt(part, row);
+  const r = await memoDialog(row, m?.text || '');
+  if (!r) return false;
+  const list = memosOf(part);
+  if (r.del) part.memos = list.filter((x) => x !== m);
+  else if (m) m.text = r.text;
+  else list.push({ row, text: r.text });
+  part.memos.sort((a, b) => a.row - b.row);
+  part.updated = Date.now();
+  await db.put('parts', part);
+  toast(r.del ? `${row}단 메모를 지웠습니다` : `${row}단에 메모를 달았습니다`);
+  return true;
+}
+
+// 메모 목록. 고른 메모의 단 번호를 돌려준다 (canJump면 이동/고치기 중 고르기)
+async function memoList(part, canJump) {
+  const list = memosOf(part).slice().sort((a, b) => a.row - b.row);
+  if (!list.length) { toast('아직 메모가 없습니다. 단 카드를 눌러 메모를 달 수 있어요.'); return null; }
+  const row = await sheet(`${part.name} · 단 메모 ${list.length}개`, list.map((m) => ({
+    label: `${m.row}단`, sub: esc(m.text.length > 40 ? m.text.slice(0, 40) + '…' : m.text), value: m.row,
+  })));
+  if (row === undefined) return null;
+  if (!canJump) { await editMemo(part, row); return null; }
+  const v = await sheet(`${row}단 메모`, [{ label: '이 단으로 이동', value: 'jump' }, { label: '메모 고치기', value: 'edit' }]);
+  if (v === 'edit') { await editMemo(part, row); return null; }
+  return v === 'jump' ? row : null;
+}
+
+// 단 카드를 눌렀을 때: 단 이동 / 메모
+async function rowMenu(part, row) {
+  const n = memosOf(part).length;
+  return sheet(`지금 ${row}단`, [
+    { label: '다른 단으로 이동 (번호 입력)', value: 'jump' },
+    { label: memoAt(part, row) ? `${row}단 메모 고치기` : `${row}단에 메모 달기`, value: 'memo' },
+    ...(n ? [{ label: `메모 전체 보기 (${n}개)`, value: 'list' }] : []),
+  ]);
+}
+
+function memoCardHtml(part, pr) {
+  const m = !pr.done && memoAt(part, pr.row);
+  return m ? `<b>${pr.row}단 메모</b><span>${esc(m.text).replace(/\n/g, '<br>')}</span>` : '';
+}
+function memoHint(part, pr) {
+  if (pr.done) return '';
+  if (memoAt(part, pr.row)) return '<span class="rc-memo">✎ 이 단에 메모</span>';
+  const nx = nextMemo(part, pr.row);
+  return nx ? `<span class="rc-memo soft">다음 메모 ${nx.row}단 · ${nx.row - pr.row}단 남음</span>` : '';
 }
 
 // ---------- 기호 설명(범례) ----------
