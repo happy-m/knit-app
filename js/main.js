@@ -11,7 +11,7 @@ import {
 import { StackView } from './stackview.js';
 import { readSizeGroups, findSizeInfo } from './sizes.js';
 
-const APP_VERSION = '1.13.1';
+const APP_VERSION = '1.13.2';
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -1452,7 +1452,7 @@ async function viewKnit(id) {
     const round = part.cal.mode.type === 'round';
     dirEl.innerHTML = pr.done ? `${icon.check}다 떴습니다`
       : `${rs ? icon.left : icon.right}${round ? '원통' : rs ? '겉면' : '안면'}<span class="dir-long"> · ${rs ? '왼쪽' : '오른쪽'}으로 읽기</span>`;
-    rowcard.innerHTML = `<span class="rc-top"><span>${pr.done ? '완료' : '지금'}</span><span class="rc-jump">${icon.edit}단 이동·메모</span></span>
+    rowcard.innerHTML = `<span class="rc-top"><span>${pr.done ? '완료' : '지금'}</span><span class="rc-jump">${icon.edit}이동·메모</span></span>
       <span class="rc-num"><span class="num rc-big">${pr.row}</span><span class="rc-u">단</span><span class="num muted">/ ${RR.hi}</span></span>
       ${pr.done ? `<span class="tag-done">${icon.check}${esc(part.name)} 완료</span>`
         : pr.mark !== null && pr.mark !== undefined ? `<span class="rc-line"><i class="mk"></i>코 표시 <b class="num">${pr.mark}</b>번 칸</span>`
@@ -1839,7 +1839,7 @@ async function viewTextKnit(part) {
   const refresh = () => {
     const pr = p();
     const pct = goal ? Math.min(100, ((pr.done ? goal : pr.row - 1) / goal) * 100) : 0;
-    rowcard.innerHTML = `<span class="rc-top"><span>${pr.done ? '완료' : '지금 뜨는 단'}</span><span class="rc-jump">${icon.edit}단 이동·메모</span></span>
+    rowcard.innerHTML = `<span class="rc-top"><span>${pr.done ? '완료' : '지금 뜨는 단'}</span><span class="rc-jump">${icon.edit}이동·메모</span></span>
       <span class="rc-num"><span class="num rc-big">${pr.row}</span><span class="rc-u">단</span>${goal ? `<span class="num muted">/ ${goal}</span>` : ''}</span>
       ${goal ? `<span class="bar"><i style="width:${pct}%"></i></span>` : ''}
       <span class="rc-line small muted">${pr.done ? `${esc(part.name)} 완료` : `${pr.row > 1 ? `${pr.row - 1}단까지 떴습니다` : '첫 단을 뜨는 중'}${goal ? ` · 목표까지 ${Math.max(0, goal - pr.row + 1)}단` : ''}`}</span>
@@ -2199,39 +2199,88 @@ async function guessLegendPage(doc) {
   return best;
 }
 
-async function setupLegend(proj, doc) {
-  const L = proj.legend;
-  const r = await pickRegion(doc, {
-    title: '기호 설명 영역',
-    page: L?.page || (await guessLegendPage(doc)),
-    area: L?.area,
-  });
-  if (!r) return false;
-  proj.legend = r;
+// 작품의 기호 설명 영역들 (여러 페이지·여러 군데 가능). 예전 proj.legend 하나짜리도 읽는다
+function legendsOf(proj) {
+  if (!Array.isArray(proj.legends)) proj.legends = proj.legend ? [proj.legend] : [];
+  delete proj.legend;
+  return proj.legends;
+}
+const legendPages = (proj) => [...new Set(legendsOf(proj).map((l) => l.page))].join('·');
+
+async function saveLegends(proj) {
   proj.updated = Date.now();
   await db.put('projects', proj);
+}
+
+// 영역 하나 추가 (i가 있으면 그 영역 다시 잡기). 저장했으면 true
+async function pickLegend(proj, doc, i) {
+  const L = legendsOf(proj);
+  const old = i !== undefined ? L[i] : null;
+  const last = L[L.length - 1];
+  const r = await pickRegion(doc, {
+    title: old ? `기호 설명 ${i + 1} 다시 잡기` : `기호 설명 영역 ${L.length + 1}`,
+    page: old?.page || (last ? Math.min(last.page + 1, doc.numPages) : await guessLegendPage(doc)),
+    area: old?.area,
+  });
+  if (!r) return false;
+  if (old) L[i] = r; else L.push(r);
+  await saveLegends(proj);
   return true;
 }
 
-// 뜨기 화면 위에 기호 설명을 띄우거나 닫는다
+// 처음 등록: 영역을 잡고, 다른 페이지에도 있으면 이어서 더 잡는다
+async function setupLegend(proj, doc) {
+  if (!(await pickLegend(proj, doc))) return false;
+  for (;;) {
+    const more = await dialog({
+      title: '기호 설명이 더 있나요?',
+      body: `지금까지 ${legendsOf(proj).length}군데 (${legendPages(proj)}쪽). 다른 페이지나 같은 페이지 다른 곳에도 기호 설명이 있으면 더 잡을 수 있어요.`,
+      buttons: [{ label: '다 됐어요', value: false }, { label: '더 잡기', value: true, primary: true }],
+    });
+    if (!more || !(await pickLegend(proj, doc))) return true;
+  }
+}
+
+// 기호 설명 영역 고치기 (추가·다시 잡기·빼기)
+async function manageLegends(proj, doc) {
+  const L = legendsOf(proj);
+  const v = await sheet('기호 설명 영역', [
+    { label: '+ 영역 추가', value: 'add' },
+    ...L.flatMap((l, i) => [
+      { label: `${i + 1}. ${l.page}쪽 다시 잡기`, value: `re:${i}` },
+      { label: `${i + 1}. ${l.page}쪽 빼기`, value: `rm:${i}`, danger: true },
+    ]),
+  ]);
+  if (!v) return false;
+  if (v === 'add') return pickLegend(proj, doc);
+  const [k, n] = v.split(':');
+  if (k === 're') return pickLegend(proj, doc, +n);
+  L.splice(+n, 1);
+  await saveLegends(proj);
+  return true;
+}
+
+// 뜨기 화면 위에 기호 설명을 띄우거나 닫는다 (여러 영역은 위아래로 이어 붙여 보여 준다)
 let legendCv = null;
 async function toggleLegend(proj, doc) {
   const open = document.querySelector('.legend-pop');
   if (open) { closeLegend(); return; }
-  if (!proj.legend && !(await setupLegend(proj, doc))) return;
+  if (!legendsOf(proj).length && !(await setupLegend(proj, doc))) return;
+  if (!legendsOf(proj).length) return;
   const el = document.createElement('div');
   el.className = 'legend-pop';
-  el.innerHTML = `<div class="lp-top"><b>기호 설명 · ${proj.legend.page}쪽</b><span class="k-spacer"></span>
-      <button type="button" class="link-btn" data-re>다시 잡기</button>
+  el.innerHTML = `<div class="lp-top"><b>기호 설명 · ${legendPages(proj)}쪽</b><span class="k-spacer"></span>
+      <button type="button" class="link-btn" data-re>영역 고치기</button>
       <button type="button" class="icon-btn" data-x aria-label="닫기">${icon.close}</button></div>
     <div class="lp-view"></div>`;
   app.querySelector('.k-main').appendChild(el);
-  legendCv = new ChartView(el.querySelector('.lp-view'), { doc, pageNum: proj.legend.page, area: proj.legend.area, maxZoom: 6 });
+  legendCv = new StackView(el.querySelector('.lp-view'), { doc, pieces: legendsOf(proj), maxZoom: 6 });
   await legendCv.init();
   el.querySelector('[data-x]').addEventListener('click', closeLegend);
   el.querySelector('[data-re]').addEventListener('click', async () => {
     closeLegend();
-    if (await setupLegend(proj, doc)) toggleLegend(proj, doc);
+    await manageLegends(proj, doc);
+    if (legendsOf(proj).length) toggleLegend(proj, doc);
   });
   onCleanup(closeLegend);
 }
