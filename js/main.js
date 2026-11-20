@@ -10,7 +10,7 @@ import {
 } from './knitting.js';
 import { StackView } from './stackview.js';
 
-const APP_VERSION = '1.10.0';
+const APP_VERSION = '1.11.0';
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -28,6 +28,7 @@ const routes = [
   [/^#\/cal\/([\w-]+)\/([1-4])(?:\/(\d+))?$/, viewCal],
   [/^#\/k\/([\w-]+)$/, viewKnit],
   [/^#\/txt\/([\w-]+)(?:\/(\d+))?$/, viewTextSetup],
+  [/^#\/pedit\/([\w-]+)$/, viewPartEdit],
   [/^#\/info\/([\w-]+)$/, viewInfo],
 ];
 
@@ -468,10 +469,8 @@ async function partActions(id, proj, parts) {
   const i = parts.indexOf(part);
   const v = await sheet(part.name, [
     { label: isText(part) ? '설명 영역·목표 단수 고치기' : '격자 다시 맞추기', value: 'cal' },
-    { label: '이어지는 페이지 추가 (다음 쪽으로 넘어가는 부분)', value: 'addseg' },
-    ...(segsOf(part).length > 1 ? [{ label: `마지막 구간 빼기 (${segsOf(part).at(-1).page}쪽)`, value: 'rmseg' }] : []),
+    { label: '이름·형태·페이지 고치기', value: 'edit' },
     { label: '복제 (왼팔·오른팔처럼 같은 차트를 한 번 더)', value: 'dup' },
-    { label: '이름 바꾸기', value: 'rename' },
     ...(i > 0 ? [{ label: '위로 옮기기', value: 'up' }] : []),
     ...(i < parts.length - 1 ? [{ label: '아래로 옮기기', value: 'down' }] : []),
     ...(part.progress ? [{ label: '진행 위치를 처음으로', value: 'reset' }] : []),
@@ -479,37 +478,8 @@ async function partActions(id, proj, parts) {
   ]);
   if (!v) return;
   if (v === 'cal') return go(isText(part) ? `#/txt/${id}/0` : calUrl(id, 1, 0));
-  if (v === 'addseg') {
-    const doc = await loadPdf(proj.fileId);
-    const last = segsOf(part).at(-1).page;
-    const pg = await sheet('이어지는 페이지', Array.from({ length: doc.numPages }, (_, i) => ({
-      label: `${i + 1}쪽`, value: i + 1, current: i + 1 === last + 1, sub: segsOf(part).some((x) => x.page === i + 1) ? '이미 이 파트에 있음 (다른 부분을 잡을 때)' : '',
-    })));
-    if (!pg) return;
-    const i = segsOf(part).length;
-    part.segs.push(isText(part) ? { page: pg, area: null } : { page: pg, area: null, rows: null, cols: null });
-    await db.put('parts', part);
-    return go(isText(part) ? `#/txt/${id}/${i}` : calUrl(id, 1, i));
-  }
-  if (v === 'rmseg') {
-    const ok = await dialog({
-      title: '마지막 구간 빼기',
-      body: `${segsOf(part).at(-1).page}쪽 구간을 이 파트에서 뺍니다. 그 구간의 영역과 격자 설정이 지워집니다.`,
-      buttons: [{ label: '취소', value: false }, { label: '빼기', value: true, danger: true }],
-    });
-    if (!ok) return;
-    part.segs.pop();
-    if (part.progress && !isText(part) && calibrated(part)) {
-      const R = rowsOf(part);
-      part.progress.row = clamp(part.progress.row, R.lo, R.hi);
-    }
-    if (part.progress?.line && (part.progress.line.seg ?? 0) >= part.segs.length) part.progress.line = null;
-    await db.put('parts', part);
-  }
-  if (v === 'rename') {
-    const n = await ask('파트 이름', part.name);
-    if (n) { part.name = n; await db.put('parts', part); }
-  } else if (v === 'dup') {
+  if (v === 'edit') return go(`#/pedit/${id}`);
+  if (v === 'dup') {
     const n = await ask('새 파트 이름', part.name + ' 2', { label: '같은 격자 설정을 쓰고, 진행 위치는 처음부터 시작합니다' });
     if (!n) return;
     const copy = JSON.parse(JSON.stringify(part));
@@ -547,19 +517,29 @@ async function partActions(id, proj, parts) {
 }
 
 // ---------- 등록 2. 파트 추가 ----------
-async function viewPartAdd(pid) {
+function viewPartAdd(pid) {
+  return partForm(pid, null);
+}
+async function viewPartEdit(id) {
+  const part = await db.get('parts', id);
+  if (!part) return go('#/');
+  return partForm(part.projectId, part);
+}
+
+// 파트 추가와 고치기는 같은 화면을 쓴다 (이름·형태·페이지 여러 장)
+async function partForm(pid, editing) {
   const proj = await db.get('projects', pid);
   if (!proj) return go('#/');
   const parts = await db.partsOf(pid);
   const doc = await loadPdf(proj.fileId);
-  const pages = []; // 고른 순서대로
-  app.innerHTML = `${header(`#/p/${pid}`, '파트 추가', `${esc(proj.name)}${proj.size ? ` · 사이즈 ${esc(proj.size)}` : ''}`)}
+  const pages = editing ? segsOf(editing).map((x) => x.page) : []; // 고른 순서대로
+  app.innerHTML = `${header(`#/p/${pid}`, editing ? '파트 고치기' : '파트 추가', `${esc(proj.name)}${proj.size ? ` · 사이즈 ${esc(proj.size)}` : ''}`)}
     <div class="page"><div class="wrap">
-      <div class="field"><label for="ptname">파트 이름</label><input id="ptname" class="input" autocomplete="off" placeholder="예: 뒷판"></div>
+      <div class="field"><label for="ptname">파트 이름</label><input id="ptname" class="input" autocomplete="off" placeholder="예: 뒷판" value="${esc(editing?.name || '')}"></div>
       <div class="field"><span class="label">도안 형태</span>
         <div class="seg"><button type="button" data-kind="chart" aria-pressed="true">기호 차트</button><button type="button" data-kind="text" aria-pressed="false">글 설명만</button></div></div>
       <div class="label" id="pagelabel">차트가 있는 페이지를 고르세요</div>
-      <p class="hint">페이지를 탭하면 크게 보고 고를 수 있습니다. 다음 쪽으로 이어지면 <b>순서대로 여러 장</b> 고르세요. 고른 페이지를 다시 누르면 빠집니다.</p>
+      <p class="hint">페이지를 탭하면 크게 보고 고를 수 있습니다. 다음 쪽으로 이어지면 <b>순서대로 여러 장</b> 고르세요. 고른 페이지를 다시 누르면 빠집니다.${editing ? ' 그대로 둔 페이지는 영역·격자 설정이 유지됩니다.' : ''}</p>
       <div class="pick-order" id="order" hidden></div>
       <div class="thumbs" id="thumbs">${Array.from({ length: doc.numPages }, (_, i) =>
         `<button type="button" class="thumb" data-p="${i + 1}" aria-pressed="false"><span class="thumb-img"><canvas></canvas></span><span class="num">${i + 1}쪽</span></button>`).join('')}</div>
@@ -567,17 +547,23 @@ async function viewPartAdd(pid) {
     <div class="footer"><button class="btn primary" id="next" disabled>다음: 영역 지정</button></div>`;
   const nameIn = app.querySelector('#ptname');
   const nextBtn = app.querySelector('#next');
-  let kind = 'chart';
-  app.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => {
-    kind = b.dataset.kind;
-    app.querySelectorAll('[data-kind]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  let kind = editing ? (isText(editing) ? 'text' : 'chart') : 'chart';
+  const setKind = (k) => {
+    kind = k;
+    app.querySelectorAll('[data-kind]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.kind === k)));
     app.querySelector('#pagelabel').textContent = kind === 'text' ? '설명이 있는 페이지를 고르세요' : '차트가 있는 페이지를 고르세요';
+  };
+  app.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => {
+    setKind(b.dataset.kind);
     check();
   }));
+  // 고치기에서 더 설정할 게 남는지: 새 페이지가 있거나 형태가 바뀌면 설정 화면으로 이어간다
+  const needsSetup = () => !editing || kind !== (isText(editing) ? 'text' : 'chart') ||
+    pages.some((pg) => !segsOf(editing).some((x) => x.page === pg && segReady(editing, x))) || !calibrated(editing);
   const check = () => {
     nextBtn.disabled = !(nameIn.value.trim() && pages.length);
-    const base = kind === 'text' ? '다음: 설명 영역' : '다음: 영역 지정';
-    nextBtn.textContent = pages.length > 1 ? `${base} (구간 ${pages.length}개)` : base;
+    const base = !needsSetup() ? '저장' : kind === 'text' ? '다음: 설명 영역' : '다음: 영역 지정';
+    nextBtn.textContent = pages.length > 1 && needsSetup() ? `${base} (구간 ${pages.length}개)` : base;
     app.querySelectorAll('.thumb').forEach((t) => {
       const k = pages.indexOf(+t.dataset.p);
       t.setAttribute('aria-pressed', String(k >= 0));
@@ -613,17 +599,67 @@ async function viewPartAdd(pid) {
       if (!nameIn.value.trim()) nameIn.focus();
     });
   });
+  const blank = (pg) => (kind === 'text' ? { page: pg, area: null } : { page: pg, area: null, rows: null, cols: null });
   nextBtn.addEventListener('click', async () => {
-    const part = {
-      id: db.uid(), projectId: pid, name: nameIn.value.trim(), page: pages[0],
-      order: parts.length ? parts[parts.length - 1].order + 1 : 0, cal: {}, progress: null, created: Date.now(),
-      kind,
-      segs: pages.map((pg) => (kind === 'text' ? { page: pg, area: null } : { page: pg, area: null, rows: null, cols: null })),
-    };
-    if (kind === 'text') part.text = { goal: null };
+    if (!editing) {
+      const part = {
+        id: db.uid(), projectId: pid, name: nameIn.value.trim(), page: pages[0],
+        order: parts.length ? parts[parts.length - 1].order + 1 : 0, cal: {}, progress: null, created: Date.now(),
+        kind, segs: pages.map(blank),
+      };
+      if (kind === 'text') part.text = { goal: null };
+      await db.put('parts', part);
+      return location.replace(partHref(part));
+    }
+    const part = editing;
+    const oldKind = isText(part) ? 'text' : 'chart';
+    if (kind !== oldKind) {
+      const ok = await dialog({
+        title: '도안 형태 바꾸기',
+        body: `${kind === 'text' ? '글 설명' : '기호 차트'}로 바꾸면 ${oldKind === 'chart' ? '격자 설정과 ' : ''}진행 위치가 처음으로 돌아갑니다. 영역은 그대로 둡니다.`,
+        buttons: [{ label: '취소', value: false }, { label: '바꾸기', value: true, primary: true }],
+      });
+      if (!ok) return;
+    }
+    // 그대로 남은 페이지는 기존 구간(영역·격자)을 다시 쓰고, 새 페이지만 빈 구간으로 만든다
+    const old = segsOf(part);
+    const used = new Map(); // 예전 구간 번호 → 새 구간 번호
+    const segs = pages.map((pg, ni) => {
+      const j = old.findIndex((x, k) => !used.has(k) && x.page === pg);
+      if (j < 0) return blank(pg);
+      used.set(j, ni);
+      const x = { ...old[j] };
+      return kind === 'text' ? { page: x.page, area: x.area } : kind !== oldKind ? { page: x.page, area: x.area, rows: null, cols: null } : x;
+    });
+    part.name = nameIn.value.trim();
+    part.segs = segs;
+    part.page = pages[0];
+    if (kind !== oldKind) {
+      part.kind = kind;
+      part.cal = {};
+      part.progress = null;
+      if (kind === 'text') part.text = { goal: part.text?.goal ?? null };
+    } else if (part.progress) {
+      const L = part.progress.line;
+      if (L) {
+        const ni = used.get(L.seg ?? 0);
+        part.progress.line = ni === undefined ? null : { ...L, seg: ni };
+      }
+      if (kind === 'chart' && calibrated(part)) {
+        const R = rowsOf(part);
+        part.progress.row = clamp(part.progress.row, R.lo, R.hi);
+      }
+    }
+    part.updated = Date.now();
     await db.put('parts', part);
-    location.replace(kind === 'text' ? `#/txt/${part.id}/0` : calUrl(part.id, 1, 0));
+    if (calibrated(part)) {
+      toast('파트를 고쳤습니다');
+      return go(`#/p/${pid}`);
+    }
+    go(partHref(part));
   });
+  setKind(kind);
+  check();
 }
 
 // ---------- 격자 맞추기 1~4단계 ----------
@@ -683,7 +719,7 @@ async function calArea(part, proj, doc, top, save) {
     <div class="pv-box" id="pv"></div>
     <p class="hint pad">손가락으로 끌어서 그리고, 모서리를 끌어 크기를 고칩니다. 번호 칸이 글자로 읽히는 도안이면 위아래로 떨어진 차트도 한 파트로 묶을 수 있습니다. 사이의 빈 공간은 번호 칸 위치로 맞춥니다.</p>
     <button type="button" class="link-btn" id="autoarea">차트 영역 자동으로 다시 잡기</button>
-    <div class="footer"><button type="button" class="btn" id="pg">페이지 바꾸기 (${part.page}쪽)</button>
+    <div class="footer"><button type="button" class="btn" id="pg">페이지 다시 고르기</button>
       <button type="button" class="btn primary" id="next" ${part.cal.area ? '' : 'disabled'}>다음: 단 번호</button></div>`;
   const box = app.querySelector('#pv');
   const nextBtn = app.querySelector('#next');
@@ -775,14 +811,7 @@ async function calArea(part, proj, doc, top, save) {
   stage.addEventListener('pointerup', up);
   stage.addEventListener('pointercancel', up);
   nextBtn.addEventListener('click', () => go(calNextUrl(part, 1)));
-  app.querySelector('#pg').addEventListener('click', async () => {
-    const v = await sheet('차트가 있는 페이지', Array.from({ length: doc.numPages }, (_, i) => ({ label: `${i + 1}쪽`, value: i + 1, current: i + 1 === part.page })));
-    if (!v || v === part.page) return;
-    part.page = v;
-    part.cal = {};
-    await save();
-    route();
-  });
+  app.querySelector('#pg').addEventListener('click', () => go(`#/pedit/${part.id}`));
 }
 
 async function calPoints(part, doc, top, save, step) {
@@ -1526,7 +1555,7 @@ async function viewTextSetup(id, segStr) {
       <label for="goal" class="label">목표 단수 (선택)</label>
       <div class="suffix"><input id="goal" class="input num" inputmode="numeric" placeholder="정해진 단수가 없으면 비워두세요" value="${part.text.goal ?? ''}"><span>단</span></div>
     </div></div>` : ''}
-    <button type="button" class="link-btn" id="pg">페이지 바꾸기 (${page}쪽)</button>
+    <button type="button" class="link-btn" id="pg">페이지 다시 고르기</button>
     <div class="footer"><button type="button" class="btn" id="list">저장하고 목록으로</button>${last
       ? '<button type="button" class="btn primary" id="start">완료하고 뜨기 시작</button>'
       : `<button type="button" class="btn primary" id="start">다음 구간 (${segs[si + 1].page}쪽)</button>`}</div>`;
@@ -1588,12 +1617,9 @@ async function viewTextSetup(id, segStr) {
   app.querySelector('#list').addEventListener('click', () => finish(`#/p/${proj.id}`));
   app.querySelector('#start').addEventListener('click', () => finish(last ? `#/k/${part.id}` : `#/txt/${part.id}/${si + 1}`));
   app.querySelector('#pg').addEventListener('click', async () => {
-    const v = await sheet('설명이 있는 페이지', Array.from({ length: doc.numPages }, (_, i) => ({ label: `${i + 1}쪽`, value: i + 1, current: i + 1 === page })));
-    if (!v || v === page) return;
-    sg.page = v;
-    sg.area = null;
+    sg.area = A; // 지금 잡던 영역은 남겨 두고 이동
     await db.put('parts', part);
-    route();
+    go(`#/pedit/${part.id}`);
   });
 }
 
