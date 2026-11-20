@@ -12,7 +12,7 @@ import { StackView } from './stackview.js';
 import { readSizeGroups, findSizeInfo } from './sizes.js';
 import { scanVideos, isYoutube, hostOf } from './videos.js';
 
-const APP_VERSION = '1.14.0';
+const APP_VERSION = '1.14.1';
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -1817,14 +1817,21 @@ async function viewTextKnit(part) {
     }
     return h;
   };
+  // 읽는 줄 강조: 줄 위아래를 흐리게 덮어 그 줄 글자만 또렷하게 보이게 한다 (글자 위에는 아무것도 안 덮음)
   const decorate = (i, v) => {
     const L = p().line;
     let h = sizeMarks(i, v);
-    if (!L || (L.seg ?? 0) !== i) return h;
-    const [w] = v.size();
-    const y1 = v.n2p(0, L.top)[1];
-    const y2 = v.n2p(0, L.bot)[1];
-    return `<i class="band" style="left:0;top:${y1 - 2}px;width:${w}px;height:${y2 - y1 + 4}px"></i>` + h;
+    if (!L) return h;
+    const [w, ht] = v.size();
+    if ((L.seg ?? 0) !== i) return `<i class="ruler-dim" style="left:0;top:0;width:${w}px;height:${ht}px"></i>` + h;
+    const t = v.n2p(0, L.top)[1];
+    const b = v.n2p(0, L.bot)[1];
+    const pad = Math.max(4, (b - t) * 0.35); // 글자 아랫부분이 밑줄에 가리지 않게 넉넉히
+    const y1 = t - pad;
+    const y2 = b + pad + 5;
+    return `<i class="ruler-dim" style="left:0;top:0;width:${w}px;height:${Math.max(0, y1)}px"></i>` +
+      `<i class="ruler-dim" style="left:0;top:${y2}px;width:${w}px;height:${Math.max(0, ht - y2)}px"></i>` +
+      `<i class="ruler-line" style="left:0;top:${y1}px;width:${w}px;height:${y2 - y1}px"></i>` + h;
   };
   const rowcard = app.querySelector('#rowcard');
   const memoEl = app.querySelector('#memocard');
