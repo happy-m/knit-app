@@ -12,7 +12,7 @@ import { StackView } from './stackview.js';
 import { readSizeGroups, findSizeInfo } from './sizes.js';
 import { scanVideos, isYoutube, hostOf } from './videos.js';
 
-const APP_VERSION = '1.14.2';
+const APP_VERSION = '1.14.3';
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -1591,7 +1591,6 @@ async function viewKnit(id) {
     await save();
     const moved = await followSeg();
     refresh(moved ? 'first' : true);
-    const movedTxt = moved ? ` · <b>${moved}쪽</b> 차트로 넘어왔어요` : '';
     if (res === 'finished') {
       if (nextPart) {
         const yes = await dialog({
@@ -1604,8 +1603,9 @@ async function viewKnit(id) {
         toast(`<b>${esc(part.name)}</b>${eul(part.name)} 다 떴습니다`, { action: '취소', onAction: () => restore(snap) });
       }
     } else {
-      toast(`<b>${part.progress.row}단</b>으로 넘어갔습니다${res === 'repeat' ? ` · 반복 ${part.progress.rep}회차` : ''}${movedTxt}`,
-        { action: '취소', onAction: () => restore(snap) });
+      // 평소에는 알림 없이 넘어간다 (되돌리기는 '이전 단'). 반복이 새로 시작되거나 페이지가 바뀔 때만 짧게 알린다
+      const note = [res === 'repeat' ? `반복 <b>${part.progress.rep}회차</b> 시작` : '', moved ? `<b>${moved}쪽</b> 차트로 넘어왔어요` : ''].filter(Boolean).join(' · ');
+      if (note) toast(note, { ms: 1800 });
     }
   });
   prevBtn.addEventListener('click', async () => {
@@ -1965,7 +1965,7 @@ async function viewTextKnit(part) {
     pr.touched = true;
     await save();
     refresh();
-    toast(`<b>${pr.row}단</b>으로 넘어갔습니다`, { action: '취소', onAction: () => restore(snap) });
+
   });
   app.querySelector('#prev').addEventListener('click', async () => {
     const pr = p();
