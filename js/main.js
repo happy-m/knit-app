@@ -12,7 +12,7 @@ import { StackView } from './stackview.js';
 import { readSizeGroups, findSizeInfo } from './sizes.js';
 import { scanVideos, isYoutube, hostOf } from './videos.js';
 
-const APP_VERSION = '1.14.3';
+const APP_VERSION = '1.14.4';
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -1311,10 +1311,14 @@ function autoDetect(labels, key) {
         const dp = it[i][along] - it[i - 1][along];
         const u = dn ? Math.abs(dp / dn) : 0;
         const sg = Math.sign(dn);
-        ok = dn !== 0 && Math.abs(dn) <= 10 && u > 0 &&
-          (i - start < 2 ? true : sg === dir && Math.abs(u - unit) < unit * 0.2);
+        // 바로 다음 번호(±1)는 간격이 달라도 잇는다 (차트 사이 빈 공간 대비).
+        // 띄엄띄엄 적힌 번호는 번호 간격과 위치 간격의 비율이 같아야 잇는다
+        const first = i - start < 2;
+        const step1 = Math.abs(dn) === 1 && (first || sg === dir);
+        const sameUnit = !first && sg === dir && unit && Math.abs(u - unit) < unit * 0.2;
+        ok = dn !== 0 && Math.abs(dn) <= 10 && u > 0 && (first || step1 || sameUnit);
         if (ok) {
-          if (i - start < 2) { unit = u; dir = sg; } else unit = (unit * (i - start - 1) + u) / (i - start);
+          if (first) { unit = u; dir = sg; } else if (Math.abs(dn) > 1 || !unit) unit = unit ? (unit + u) / 2 : u;
         }
       }
       if (!ok) {
@@ -1482,7 +1486,7 @@ async function viewKnit(id) {
     const total = repeatTotal(part);
     const rs = isRightSide(part);
     const round = part.cal.mode.type === 'round';
-    dirEl.innerHTML = pr.done ? `${icon.check}다 떴습니다`
+    dirEl.innerHTML = pr.done ? `${icon.check}완료`
       : `${rs ? icon.left : icon.right}${round ? '원통' : rs ? '겉면' : '안면'}<span class="dir-long"> · ${rs ? '왼쪽' : '오른쪽'}으로 읽기</span>`;
     rowcard.innerHTML = `<span class="rc-top"><span>${pr.done ? '완료' : '지금'}</span><span class="rc-jump">${icon.edit}이동·메모</span></span>
       <span class="rc-num"><span class="num rc-big">${pr.row}</span><span class="rc-u">단</span><span class="num muted">/ ${RR.hi}</span></span>
@@ -1493,7 +1497,7 @@ async function viewKnit(id) {
       ${memoHint(part, pr)}`;
     showMemo(pr);
     nextBtn.disabled = !!pr.done;
-    nextBtn.textContent = pr.done ? '다 떴습니다' : '다음 단';
+    nextBtn.textContent = pr.done ? '완료' : '다음 단';
     segBar?.querySelectorAll('[data-seg]').forEach((b) => {
       const i = +b.dataset.seg;
       b.classList.toggle('on', i === seg);
@@ -1600,7 +1604,7 @@ async function viewKnit(id) {
         });
         if (yes) go(partHref(nextPart));
       } else {
-        toast(`<b>${esc(part.name)}</b>${eul(part.name)} 다 떴습니다`, { action: '취소', onAction: () => restore(snap) });
+        // 마지막 단: 버튼과 단 카드가 '완료'로 바뀌므로 따로 알리지 않는다 (되돌리기는 '이전 단')
       }
     } else {
       // 평소에는 알림 없이 넘어간다 (되돌리기는 '이전 단'). 반복이 새로 시작되거나 페이지가 바뀔 때만 짧게 알린다
@@ -1887,7 +1891,7 @@ async function viewTextKnit(part) {
       ${memoHint(part, pr)}`;
     showMemo(pr);
     nextBtn.disabled = !!pr.done;
-    nextBtn.textContent = pr.done ? '다 떴습니다' : '다음 단';
+    nextBtn.textContent = pr.done ? '완료' : '다음 단';
     cv.redraw();
   };
 
@@ -1957,7 +1961,7 @@ async function viewTextKnit(part) {
         });
         if (yes) go(partHref(nextPart));
       } else {
-        toast(`<b>${esc(part.name)}</b>${eul(part.name)} 다 떴습니다`, { action: '취소', onAction: () => restore(snap) });
+        // 마지막 단: 버튼과 단 카드가 '완료'로 바뀌므로 따로 알리지 않는다 (되돌리기는 '이전 단')
       }
       return;
     }
