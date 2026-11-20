@@ -56,6 +56,7 @@ export function toast(msg, { action, onAction, ms = 3500 } = {}) {
   }
   layer().appendChild(el);
   toastTimer = setTimeout(() => el.remove(), ms);
+  return el;
 }
 
 // 버튼을 고르면 그 value로 끝나는 대화상자

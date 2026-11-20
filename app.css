@@ -323,3 +323,36 @@ textarea.input.area { padding: 12px; min-height: 120px; line-height: 1.5; resize
 .sv-div { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px; background: var(--ground); color: var(--sub); font-size: 12px; }
 .sv-div::after { content: ""; flex: 1; border-top: 1px dashed #B9BCB4; }
 .sv-div span { position: sticky; left: 10px; font-weight: 700; background: var(--ground); padding-right: 6px; }
+/* 내 사이즈 강조 */
+.cv-ov .sz-on { border: 2px solid var(--teal); background: rgba(15, 107, 99, 0.14); border-radius: 4px; margin: -2px 0 0 -3px; padding: 2px 3px; box-sizing: content-box; }
+.cv-ov .sz-dim { background: rgba(255, 255, 255, 0.72); }
+.sz-chip { min-height: 40px; padding: 0 12px; border-radius: 999px; border: 1.5px solid var(--teal); background: #fff; color: var(--teal); font-weight: 700; font-size: 14px; white-space: nowrap; }
+.sz-chip[aria-pressed="true"] { background: var(--teal); color: #fff; }
+.size-sheet { display: flex; flex-direction: column; gap: 10px; padding: 18px 18px calc(18px + env(safe-area-inset-bottom)); }
+.size-sheet .label { margin: 4px 0 0; }
+.sz-found { background: var(--ground); border-radius: 10px; padding: 10px 12px; font-size: 15px; line-height: 1.7; }
+.sz-picks { display: grid; gap: 8px; }
+.sz-pick { border: 1.5px solid var(--line); background: #fff; border-radius: 12px; padding: 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--ink); }
+.sz-pick b { font-size: 18px; }
+.sz-pick small { font-size: 11px; color: var(--sub); }
+.sz-pick[aria-pressed="true"] { border-color: var(--teal); background: #E3EFEC; color: var(--teal); }
+.sz-pv-on { background: var(--teal); color: #fff; border-radius: 6px; padding: 0 6px; font-weight: 800; }
+.sz-pv-dim { color: #B5BAB6; }
+.sz-tog { display: flex; justify-content: space-between; align-items: center; font-size: 15px; min-height: 44px; }
+.sz-tog input { width: 22px; height: 22px; accent-color: var(--teal); }
+/* 기호 설명 */
+.k-main { position: relative; }
+.legend-pop { position: absolute; left: 10px; right: 10px; top: 64px; z-index: 20; background: #fff; border-radius: 14px;
+  box-shadow: 0 12px 36px rgba(28, 43, 42, 0.28); border: 1px solid var(--line); display: flex; flex-direction: column; height: min(48vh, 420px); overflow: hidden; }
+.lp-top { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 14px; border-bottom: 1px solid var(--line); }
+.lp-top .link-btn { min-height: 40px; }
+.lp-view { flex: 1; position: relative; }
+.pg-step { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 0 12px 4px; }
+.pg-step .btn { min-width: 52px; font-size: 22px; padding: 0; }
+/* 뜨기 화면 위쪽 줄: 한 줄에 맞추기 (파트 이름이 줄어든다) */
+.k-top { flex-wrap: nowrap; gap: 6px; }
+.k-top .part-switch { min-width: 0; flex: 0 1 auto; }
+.k-top .ps-t { min-width: 0; }
+.k-top .ps-name, .k-top .ps-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.k-top > .btn, .k-top .sz-chip { flex: none; padding: 0 11px; min-height: 44px; }
+.k-top .k-spacer { min-width: 0; }

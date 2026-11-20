@@ -9,8 +9,9 @@ import {
   segsOf, segPart, segReady, segForRow, pagesLabel,
 } from './knitting.js';
 import { StackView } from './stackview.js';
+import { readSizeGroups, findSizeInfo } from './sizes.js';
 
-const APP_VERSION = '1.11.0';
+const APP_VERSION = '1.12.0';
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -311,7 +312,7 @@ async function viewProject(pid) {
   app.querySelector('#pmore').addEventListener('click', async () => {
     const v = await sheet(proj.name, [
       { label: '작품 이름 바꾸기', value: 'rename' },
-      { label: '사이즈 바꾸기', value: 'size' },
+      { label: '내 사이즈 (글 설명에서 내 사이즈 숫자 강조)', value: 'size' },
       { label: '작품 정보 (실·바늘·게이지·날짜·메모)', value: 'info' },
       { label: '작품 삭제', value: 'delete', danger: true },
     ]);
@@ -320,8 +321,7 @@ async function viewProject(pid) {
       const n = await ask('작품 이름', proj.name);
       if (n) { proj.name = n; await db.put('projects', proj); route(); }
     } else if (v === 'size') {
-      const n = await ask('내가 뜰 사이즈', proj.size || '');
-      if (n !== null) { proj.size = n; await db.put('projects', proj); route(); }
+      if (await sizeSheet(proj)) route();
     } else if (v === 'delete') {
       const ok = await dialog({
         title: `${esc(proj.name)} 삭제`,
@@ -335,6 +335,73 @@ async function viewProject(pid) {
       await db.del('projects', proj.id);
       go('#/');
     }
+  });
+}
+
+// ---------- 내 사이즈 ----------
+const ORD = ['첫', '두', '세', '네', '다섯', '여섯', '일곱', '여덟'];
+function sizeOrdinal(i, n) {
+  if (n === 3 && i === 1) return '괄호 안 숫자';
+  return `${ORD[i] || i + 1} 번째 숫자`;
+}
+
+// 도안의 사이즈 표기를 보여 주고 내 사이즈(몇 번째 숫자인지)를 고른다. 저장하면 true
+async function sizeSheet(proj) {
+  const doc = await loadPdf(proj.fileId);
+  const wait = toast('도안에서 사이즈 표기를 찾는 중…', { ms: 8000 });
+  const info = await findSizeInfo(doc);
+  wait?.remove?.();
+  const cur = proj.sizes || {};
+  let idx = Number.isInteger(cur.idx) && cur.idx < info.n ? cur.idx : null;
+  let dim = cur.dim !== false;
+  return new Promise((resolve) => {
+    const el = document.createElement('div');
+    el.className = 'scrim sheet-scrim';
+    const exHtml = () => info.examples.map((ex) => `<div>${esc(ex.before)}${ex.values.map((v, j) =>
+      `<span class="${j === idx ? 'sz-pv-on' : idx !== null && dim ? 'sz-pv-dim' : ''}">${esc(v)}</span>`).join(' ')}${esc(ex.after)}</div>`).join('');
+    const pickHtml = () => Array.from({ length: info.n }, (_, i) =>
+      `<button type="button" class="sz-pick" data-i="${i}" aria-pressed="${i === idx}"><b>${esc(info.labels?.[i] ?? String(i + 1))}</b><small>${sizeOrdinal(i, info.n)}</small></button>`).join('');
+    el.innerHTML = `<div class="sheet size-sheet" role="dialog" aria-modal="true">
+      <div class="sheet-title">내 사이즈</div>
+      ${info.n ? `
+        ${info.labels ? `<div class="label">도안에서 찾은 사이즈 표기 (${info.labelPage}쪽)</div>
+          <div class="sz-found">${info.labelLines.map(esc).join('<br>')}</div>` : ''}
+        <div class="label">뜨는 사이즈를 고르세요</div>
+        <div class="sz-picks" style="grid-template-columns:repeat(${Math.min(info.n, 4)},1fr)">${pickHtml()}</div>
+        ${info.examples.length ? `<div class="label">미리보기</div><div class="sz-found sz-ex">${exHtml()}</div>` : ''}
+        <label class="sz-tog"><span>다른 사이즈 숫자는 흐리게</span><input type="checkbox" id="szdim" ${dim ? 'checked' : ''}></label>`
+      : '<p class="small muted">이 도안에서는 "36 (39) 43"처럼 사이즈별로 나열된 숫자를 찾지 못했어요. 사이즈 이름만 적어 둘 수 있습니다.</p>'}
+      <div class="field"><label for="szname">사이즈 이름 (선택)</label><input id="szname" class="input" autocomplete="off" placeholder="예: 슬림핏 S" value="${esc(proj.size || '')}"></div>
+      <div class="dialog-btns">${cur.idx !== undefined ? '<button type="button" class="btn" data-off>강조 끄기</button>' : '<button type="button" class="btn" data-x>취소</button>'}<button type="button" class="btn primary" data-ok>저장</button></div>
+    </div>`;
+    const redraw = () => {
+      el.querySelectorAll('.sz-pick').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.i === idx)));
+      const ex = el.querySelector('.sz-ex');
+      if (ex) ex.innerHTML = exHtml();
+    };
+    const done = async (save, off) => {
+      if (save) {
+        proj.size = el.querySelector('#szname').value.trim();
+        if (off) delete proj.sizes;
+        else if (idx !== null) proj.sizes = { idx, n: info.n, labels: info.labels, dim };
+        proj.updated = Date.now();
+        await db.put('projects', proj);
+      }
+      el.remove();
+      resolve(save);
+    };
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('.sz-pick');
+      if (b) {
+        idx = +b.dataset.i;
+        if (!el.querySelector('#szname').value.trim() && info.labels) el.querySelector('#szname').value = info.labels[idx];
+        redraw();
+      } else if (e.target.closest('[data-ok]')) done(true);
+      else if (e.target.closest('[data-off]')) done(true, true);
+      else if (e.target.closest('[data-x]') || e.target === el) done(false);
+    });
+    el.querySelector('#szdim')?.addEventListener('change', (e) => { dim = e.target.checked; redraw(); });
+    document.getElementById('layer').appendChild(el);
   });
 }
 
@@ -1299,6 +1366,7 @@ async function viewKnit(id) {
           <span class="ps-t"><span class="ps-name">${esc(part.name)}</span><span class="ps-sub">${proj.size ? `사이즈 ${esc(proj.size)} · ` : ''}파트 ${idx + 1}/${parts.length}</span></span>${icon.chev}</button>
         <span class="k-spacer"></span>
         <span class="dir-chip" id="dir"></span>
+        <button type="button" class="btn" id="legbtn">기호</button>
         <button type="button" class="btn" id="docbtn">도안</button>
       </div>
       ${segs.length > 1 ? '<div class="seg-chips k-segs" id="segs"></div>' : ''}
@@ -1515,6 +1583,7 @@ async function viewKnit(id) {
     if (v && v !== id) go(partHref(parts.find((x) => x.id === v)));
   });
   app.querySelector('#docbtn').addEventListener('click', () => openDoc(doc));
+  app.querySelector('#legbtn').addEventListener('click', () => toggleLegend(proj, doc));
 
   // 뜨는 동안 화면 켜두기
   let lock = null;
@@ -1680,6 +1749,8 @@ async function viewTextKnit(part) {
         <button type="button" class="part-switch" id="sw" aria-label="다른 파트로 바꾸기">
           <span class="ps-t"><span class="ps-name">${esc(part.name)}</span><span class="ps-sub">${proj.size ? `사이즈 ${esc(proj.size)} · ` : ''}파트 ${idx + 1}/${parts.length}</span></span>${icon.chev}</button>
         <span class="k-spacer"></span>
+        ${proj.sizes ? `<button type="button" class="sz-chip" id="szchip" aria-pressed="true">사이즈 ${esc(proj.sizes.labels?.[proj.sizes.idx] ?? proj.sizes.idx + 1)}</button>` : ''}
+        <button type="button" class="btn" id="legbtn">기호</button>
         <button type="button" class="btn" id="docbtn">도안</button>
       </div>
       <div class="k-chart" id="chart"></div>
@@ -1695,13 +1766,33 @@ async function viewTextKnit(part) {
   const snapshot = () => JSON.stringify(part.progress);
   const restore = async (s) => { part.progress = JSON.parse(s); await save(); refresh(); };
 
+  // 내 사이즈 숫자 강조 (작품에 사이즈를 정해 두었을 때)
+  const SZ = proj.sizes;
+  let szOn = !!SZ;
+  let szGroups = null;
+  const sizeMarks = (i, v) => {
+    if (!szOn || !szGroups?.[i]) return '';
+    const box = (b, cls) => {
+      const [x1, y1] = v.n2p(b.x, b.y);
+      const [x2, y2] = v.n2p(b.x + b.w, b.y + b.h);
+      return `<i class="${cls}" style="left:${x1}px;top:${y1}px;width:${x2 - x1}px;height:${y2 - y1}px"></i>`;
+    };
+    let h = '';
+    for (const g of szGroups[i]) {
+      if (g.nums.length !== SZ.n) continue;
+      g.nums.forEach((b, j) => { if (j === SZ.idx) h += box(b, 'sz-on'); else if (SZ.dim) h += box(b, 'sz-dim'); });
+      if (SZ.dim) g.parens.forEach((b) => { h += box(b, 'sz-dim'); });
+    }
+    return h;
+  };
   const decorate = (i, v) => {
     const L = p().line;
-    if (!L || (L.seg ?? 0) !== i) return '';
+    let h = sizeMarks(i, v);
+    if (!L || (L.seg ?? 0) !== i) return h;
     const [w] = v.size();
     const y1 = v.n2p(0, L.top)[1];
     const y2 = v.n2p(0, L.bot)[1];
-    return `<i class="band" style="left:0;top:${y1 - 2}px;width:${w}px;height:${y2 - y1 + 4}px"></i>`;
+    return `<i class="band" style="left:0;top:${y1 - 2}px;width:${w}px;height:${y2 - y1 + 4}px"></i>` + h;
   };
   const rowcard = app.querySelector('#rowcard');
   const nextBtn = app.querySelector('#next');
@@ -1747,6 +1838,15 @@ async function viewTextKnit(part) {
   try { saved = +localStorage.getItem(zKey) || 0; } catch {}
   await cv.init(saved || undefined);
   linesP = Promise.all(cv.pieces.map((pc) => readTextLines(pc.page, pc.area)));
+  if (SZ) {
+    Promise.all(cv.pieces.map((pc) => readSizeGroups(pc.page, pc.area))).then((g) => { szGroups = g; cv.redraw(); });
+    app.querySelector('#szchip').addEventListener('click', (e) => {
+      szOn = !szOn;
+      e.currentTarget.setAttribute('aria-pressed', String(szOn));
+      cv.redraw();
+      toast(szOn ? '내 사이즈 숫자를 강조합니다' : '강조를 껐습니다 (원래 도안 그대로)');
+    });
+  }
   if (!saved) {
     // 처음 열 때는 글자가 읽힐 만큼(줄 높이 약 15px) 확대해서 시작한다
     const lines = (await linesP)[0];
@@ -1813,6 +1913,7 @@ async function viewTextKnit(part) {
     if (v && v !== id) go(partHref(parts.find((x) => x.id === v)));
   });
   app.querySelector('#docbtn').addEventListener('click', () => openDoc(doc));
+  app.querySelector('#legbtn').addEventListener('click', () => toggleLegend(proj, doc));
   let lock = null;
   const keepAwake = async () => { try { lock = await navigator.wakeLock?.request('screen'); } catch {} };
   keepAwake();
@@ -1876,6 +1977,129 @@ function previewPage(doc, pageNum, pickLabel) {
     el.querySelectorAll('[data-x]').forEach((b) => b.addEventListener('click', () => done(false)));
     el.querySelector('[data-pick]').addEventListener('click', () => done(true));
   });
+}
+
+// ---------- 기호 설명(범례) ----------
+// 페이지에서 사각형 영역 하나를 고른다. 페이지는 ‹ › 로 넘길 수 있다. 고르면 {page, area}
+function pickRegion(doc, { title, page, area }) {
+  return new Promise((resolve) => {
+    let pg = page;
+    let A = area ? { ...area } : { x: 0.1, y: 0.1, w: 0.8, h: 0.4 };
+    const el = document.createElement('div');
+    el.className = 'docv';
+    el.innerHTML = `<div class="docv-top"><b>${esc(title)}</b><span class="k-spacer"></span>
+        <button type="button" class="icon-btn" data-x aria-label="닫기">${icon.close}</button></div>
+      <div class="pg-step"><button type="button" class="btn" data-d="-1" aria-label="이전 페이지">‹</button><b id="pgno"></b><button type="button" class="btn" data-d="1" aria-label="다음 페이지">›</button></div>
+      <p class="hint pad">기호 설명 부분을 손가락으로 끌어서 감싸주세요. 모서리를 끌면 크기를 바꿉니다.</p>
+      <div class="pv-box" id="rpv"><div class="pv-stage"><canvas></canvas><div class="pv-rect"><i class="h tl"></i><i class="h tr"></i><i class="h bl"></i><i class="h br"></i></div></div></div>
+      <div class="footer"><button type="button" class="btn" data-x>취소</button><button type="button" class="btn primary" data-ok>저장</button></div>`;
+    document.getElementById('layer').appendChild(el);
+    const box = el.querySelector('#rpv');
+    const stage = el.querySelector('.pv-stage');
+    const rect = el.querySelector('.pv-rect');
+    let W = 0, H = 0;
+    const draw = () => Object.assign(rect.style, { left: A.x * W + 'px', top: A.y * H + 'px', width: A.w * W + 'px', height: A.h * H + 'px' });
+    const layout = async () => {
+      el.querySelector('#pgno').textContent = `${pg}쪽 / ${doc.numPages}`;
+      const sz = await pageSize(doc, pg);
+      const cssW = Math.min(box.clientWidth - 2, ((box.clientHeight - 2) * sz.w) / sz.h);
+      W = cssW;
+      H = (cssW * sz.h) / sz.w;
+      stage.style.width = W + 'px';
+      stage.style.height = H + 'px';
+      draw();
+      await renderPage(doc, pg, stage.querySelector('canvas'), cssW);
+    };
+    let anchor = null;
+    const pt = (e) => {
+      const r = stage.getBoundingClientRect();
+      return [clamp((e.clientX - r.left) / W, 0, 1), clamp((e.clientY - r.top) / H, 0, 1)];
+    };
+    stage.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      stage.setPointerCapture(e.pointerId);
+      const [x, y] = pt(e);
+      anchor = [x, y];
+      const corners = [[A.x, A.y], [A.x + A.w, A.y], [A.x, A.y + A.h], [A.x + A.w, A.y + A.h]];
+      for (let i = 0; i < 4; i++) {
+        const [cx, cy] = corners[i];
+        if (Math.hypot((cx - x) * W, (cy - y) * H) < 28) { anchor = corners[3 - i]; break; }
+      }
+    });
+    stage.addEventListener('pointermove', (e) => {
+      if (!anchor) return;
+      const [x, y] = pt(e);
+      const nA = { x: Math.min(x, anchor[0]), y: Math.min(y, anchor[1]), w: Math.abs(x - anchor[0]), h: Math.abs(y - anchor[1]) };
+      if (nA.w * W > 16 && nA.h * H > 16) { A = nA; draw(); }
+    });
+    const up = () => { anchor = null; };
+    stage.addEventListener('pointerup', up);
+    stage.addEventListener('pointercancel', up);
+    el.querySelectorAll('[data-d]').forEach((b) => b.addEventListener('click', () => {
+      const n = clamp(pg + +b.dataset.d, 1, doc.numPages);
+      if (n !== pg) { pg = n; layout(); }
+    }));
+    const done = (v) => { el.remove(); resolve(v); };
+    el.querySelectorAll('[data-x]').forEach((b) => b.addEventListener('click', () => done(null)));
+    el.querySelector('[data-ok]').addEventListener('click', () => done({ page: pg, area: A }));
+    requestAnimationFrame(layout);
+  });
+}
+
+// 기호 설명이 있을 법한 페이지: 뜨개 약어·기호 이름이 가장 많이 나오는 페이지
+async function guessLegendPage(doc) {
+  const re = /기호|약어|범례|겉뜨기|안뜨기|걸러뜨기|K2tog|SSK|SSP|P2tog|M1[LR]?|yo\b|symbol|legend/gi;
+  let best = 1, bestN = 0;
+  for (let n = 1; n <= doc.numPages; n++) {
+    try {
+      const tc = await (await doc.getPage(n)).getTextContent();
+      const c = (tc.items.map((it) => it.str).join(' ').match(re) || []).length;
+      if (c > bestN) { bestN = c; best = n; }
+    } catch {}
+  }
+  return best;
+}
+
+async function setupLegend(proj, doc) {
+  const L = proj.legend;
+  const r = await pickRegion(doc, {
+    title: '기호 설명 영역',
+    page: L?.page || (await guessLegendPage(doc)),
+    area: L?.area,
+  });
+  if (!r) return false;
+  proj.legend = r;
+  proj.updated = Date.now();
+  await db.put('projects', proj);
+  return true;
+}
+
+// 뜨기 화면 위에 기호 설명을 띄우거나 닫는다
+let legendCv = null;
+async function toggleLegend(proj, doc) {
+  const open = document.querySelector('.legend-pop');
+  if (open) { closeLegend(); return; }
+  if (!proj.legend && !(await setupLegend(proj, doc))) return;
+  const el = document.createElement('div');
+  el.className = 'legend-pop';
+  el.innerHTML = `<div class="lp-top"><b>기호 설명 · ${proj.legend.page}쪽</b><span class="k-spacer"></span>
+      <button type="button" class="link-btn" data-re>다시 잡기</button>
+      <button type="button" class="icon-btn" data-x aria-label="닫기">${icon.close}</button></div>
+    <div class="lp-view"></div>`;
+  app.querySelector('.k-main').appendChild(el);
+  legendCv = new ChartView(el.querySelector('.lp-view'), { doc, pageNum: proj.legend.page, area: proj.legend.area, maxZoom: 6 });
+  await legendCv.init();
+  el.querySelector('[data-x]').addEventListener('click', closeLegend);
+  el.querySelector('[data-re]').addEventListener('click', async () => {
+    closeLegend();
+    if (await setupLegend(proj, doc)) toggleLegend(proj, doc);
+  });
+  onCleanup(closeLegend);
+}
+function closeLegend() {
+  legendCv?.destroy();
+  legendCv = null;
+  document.querySelector('.legend-pop')?.remove();
 }
 
 // 도안 전체 보기
