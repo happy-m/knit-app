@@ -12,7 +12,7 @@ import { StackView } from './stackview.js';
 import { readSizeGroups, findSizeInfo } from './sizes.js';
 import { scanVideos, isYoutube, hostOf } from './videos.js';
 
-const APP_VERSION = '1.14.1';
+const APP_VERSION = '1.14.2';
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -1196,8 +1196,11 @@ async function readNumberLabels(page, area, margin = 0) {
     const tc = await page.getTextContent();
     const out = [];
     for (const it of tc.items) {
-      const s = (it.str || '').trim();
-      if (!/^\d{1,3}$/.test(s)) continue;
+      // "12", "→ 8", "7 ←", "8단" 처럼 화살표나 '단'이 붙은 번호도 읽는다
+      const raw = (it.str || '').trim();
+      const mm = raw.match(/^(?:[→←⇒⇐➝➜▶◀<>\-–—\s]|단)*(\d{1,3})(?:[→←⇒⇐➝➜▶◀<>\-–—.\s]|단)*$/);
+      if (!mm) continue;
+      const s = mm[1];
       const [a, b, , d, e, f] = it.transform;
       const h = Math.hypot(b, d) || it.height || 0;
       const w = it.width || h * 0.6 * s.length;
@@ -1206,7 +1209,9 @@ async function readNumberLabels(page, area, margin = 0) {
       const cx = (x1 + x2) / 2 / vp.width;
       const cy = (y1 + y2) / 2 / vp.height;
       if (cx < area.x - margin || cx > area.x + area.w + margin || cy < area.y - margin || cy > area.y + area.h + margin) continue;
-      out.push({ n: parseInt(s, 10), cx, cy, hw: Math.abs(x2 - x1) / 2 / vp.width, hh: Math.abs(y2 - y1) / 2 / vp.height });
+      // 화살표가 붙어 있으면 상자 폭을 숫자 부분만큼으로 줄인다
+      const hw = (Math.abs(x2 - x1) / 2 / vp.width) * (s.length / Math.max(1, raw.replace(/\s/g, '').length));
+      out.push({ n: parseInt(s, 10), cx, cy, hw, hh: Math.abs(y2 - y1) / 2 / vp.height });
     }
     return out.length ? out : null;
   } catch {
@@ -1286,16 +1291,41 @@ function autoDetect(labels, key) {
     } else groups.push({ c: l[cross], items: [l] });
   }
   let best = null;
-  for (const g of groups) {
-    const it = g.items.sort((p, q) => p[along] - q[along]);
+  // 단 번호가 왼쪽(짝수)·오른쪽(홀수)에 번갈아 적힌 차트: 두 세로줄을 합친 것도 후보로 본다
+  const cands = groups.map((g) => g.items);
+  if (key === 'y') {
+    const big = groups.filter((g) => g.items.length >= 2);
+    for (let i = 0; i < big.length; i++) for (let j = i + 1; j < big.length; j++) cands.push([...big[i].items, ...big[j].items]);
+  }
+  for (const items of cands) {
+    const it = items.slice().sort((p, q) => p[along] - q[along]);
+    // 번호 간격과 위치 간격이 같은 비율로 이어지는 구간을 찾는다
+    // (1,2,3…뿐 아니라 35,30,25…5,1처럼 띄엄띄엄 적힌 번호도 된다)
     let start = 0;
+    let unit = null;
+    let dir = 0;
     for (let i = 1; i <= it.length; i++) {
-      const ok = i < it.length && Math.abs(it[i].n - it[i - 1].n) === 1 &&
-        (i - start < 2 || Math.sign(it[i].n - it[i - 1].n) === Math.sign(it[start + 1].n - it[start].n));
+      let ok = false;
+      if (i < it.length) {
+        const dn = it[i].n - it[i - 1].n;
+        const dp = it[i][along] - it[i - 1][along];
+        const u = dn ? Math.abs(dp / dn) : 0;
+        const sg = Math.sign(dn);
+        ok = dn !== 0 && Math.abs(dn) <= 10 && u > 0 &&
+          (i - start < 2 ? true : sg === dir && Math.abs(u - unit) < unit * 0.2);
+        if (ok) {
+          if (i - start < 2) { unit = u; dir = sg; } else unit = (unit * (i - start - 1) + u) / (i - start);
+        }
+      }
       if (!ok) {
         const len = i - start;
-        if (len >= 3 && (!best || len > best.len)) best = { len, first: it[start], last: it[i - 1], items: it.slice(start, i) };
+        const span = Math.abs(it[i - 1].n - it[start].n);
+        if (len >= 3 && (!best || span > best.span || (span === best.span && len > best.len))) {
+          best = { len, span, first: it[start], last: it[i - 1], items: it.slice(start, i) };
+        }
         start = i;
+        unit = null;
+        dir = 0;
       }
     }
   }
