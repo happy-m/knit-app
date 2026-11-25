@@ -13,7 +13,7 @@ import { validRing, ringOnView, stadium } from './circ.js';
 import { readSizeGroups, findSizeInfo } from './sizes.js';
 import { scanVideos, isYoutube, hostOf } from './videos.js';
 
-const APP_VERSION = '1.15.0';
+const APP_VERSION = '1.16.0';
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -144,13 +144,13 @@ async function viewHome() {
     }
     if (p.size) bits.push(esc(p.size));
     const resume = cur && !alert ? partHref(cur) : null;
-    cards.push(`<div class="card proj-row">
+    cards.push(`<div class="swipe" data-id="${p.id}"><button type="button" class="sw-del" tabindex="-1">삭제</button><div class="card proj-row sw-row">
       <a class="pr-main" href="#/p/${p.id}">
         <span class="ring ${ringCls}" style="--p:${pct}%"><span>${center}</span></span>
         <span class="pr-t"><b>${esc(p.name)}</b><span class="pr-sub">${bits.join(' · ')}</span></span>
       </a>
       ${resume ? `<a class="play" href="${resume}" aria-label="${esc(p.name)} 이어서 뜨기"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M4.5 2.5l9 5.5-9 5.5z" fill="currentColor"/></svg></a>` : ''}
-    </div>`);
+    </div></div>`);
   }
   app.innerHTML = `
     <div class="head home-head"><h1 class="big-title">내 작품</h1>
@@ -169,6 +169,7 @@ async function viewHome() {
       </div>
       <p class="hint center">v${APP_VERSION}</p>
     </div></div>`;
+  bindSwipeRows(projects);
   app.querySelector('#bk-out').addEventListener('click', exportBackup);
   const bkIn = app.querySelector('#bk-in');
   bkIn.addEventListener('change', async () => {
@@ -194,6 +195,107 @@ async function viewHome() {
       go('#/new');
     })
   );
+}
+
+// 작품 하나를 지운다 (파트·도안 PDF·기록 모두)
+async function removeProject(proj) {
+  for (const x of await db.partsOf(proj.id)) await db.del('parts', x.id);
+  const others = (await db.all('projects')).filter((x) => x.id !== proj.id && x.fileId === proj.fileId);
+  if (!others.length) {
+    await db.del('files', proj.fileId);
+    forgetPdf(proj.fileId);
+  }
+  await db.del('projects', proj.id);
+}
+
+async function confirmRemoveProject(proj) {
+  const ok = await dialog({
+    title: `${esc(proj.name)} 삭제`,
+    body: '도안 PDF와 모든 파트, 진행 기록이 이 기기에서 지워집니다. 되돌릴 수 없습니다.',
+    buttons: [{ label: '취소', value: false }, { label: '삭제', value: true, danger: true }],
+  });
+  if (!ok) return false;
+  await removeProject(proj);
+  toast(`${esc(proj.name)}${eul(proj.name)} 지웠습니다`);
+  return true;
+}
+
+// 첫 화면 작품 줄: 왼쪽으로 밀면 삭제 버튼, 길게 누르면 메뉴
+function bindSwipeRows(projects) {
+  const OPEN = 88;
+  let openRow = null;
+  const setX = (row, x, anim) => {
+    row.style.transition = anim ? 'transform .2s ease' : 'none';
+    row.style.transform = x ? `translateX(${x}px)` : '';
+    row.closest('.swipe').classList.toggle('open', x < 0);
+  };
+  const closeOpen = () => { if (openRow) { setX(openRow, 0, true); openRow = null; } };
+  const byId = (id) => projects.find((x) => x.id === id);
+  const menu = async (id) => {
+    closeOpen();
+    const proj = byId(id);
+    if (!proj) return;
+    navigator.vibrate?.(10);
+    const v = await sheet(proj.name, [
+      { label: '열기', value: 'open' },
+      { label: '작품 이름 바꾸기', value: 'rename' },
+      { label: '작품 삭제', value: 'delete', danger: true },
+    ]);
+    if (v === 'open') go(`#/p/${id}`);
+    else if (v === 'rename') {
+      const n = await ask('작품 이름', proj.name);
+      if (n) { proj.name = n; await db.put('projects', proj); route(); }
+    } else if (v === 'delete' && await confirmRemoveProject(proj)) route();
+  };
+  app.querySelectorAll('.swipe').forEach((wrap) => {
+    const row = wrap.querySelector('.sw-row');
+    const id = wrap.dataset.id;
+    let st = null;
+    let timer = null;
+    let swallow = false; // 밀거나 길게 누른 뒤 따라오는 클릭은 무시
+    row.addEventListener('pointerdown', (e) => {
+      if (e.button > 0) return;
+      if (openRow && openRow !== row) closeOpen();
+      st = { x: e.clientX, y: e.clientY, base: openRow === row ? -OPEN : 0, dir: null, id: e.pointerId };
+      swallow = false;
+      clearTimeout(timer);
+      timer = setTimeout(() => { if (st && !st.dir) { st = null; swallow = true; menu(id); } }, 550);
+    });
+    row.addEventListener('pointermove', (e) => {
+      if (!st || e.pointerId !== st.id) return;
+      const dx = e.clientX - st.x, dy = e.clientY - st.y;
+      if (!st.dir && Math.hypot(dx, dy) > 8) {
+        clearTimeout(timer);
+        st.dir = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+        if (st.dir === 'h') { try { row.setPointerCapture(e.pointerId); } catch {} }
+      }
+      if (st.dir === 'h') setX(row, clamp(st.base + dx, -OPEN - 24, 0), false);
+    });
+    const end = (e) => {
+      clearTimeout(timer);
+      if (!st) return;
+      if (st.dir === 'h') {
+        swallow = true;
+        const dx = e.clientX - st.x;
+        const open = st.base + dx < -OPEN / 2;
+        setX(row, open ? -OPEN : 0, true);
+        openRow = open ? row : openRow === row ? null : openRow;
+      } else if (!st.dir && openRow === row) {
+        swallow = true;
+        closeOpen();
+      }
+      st = null;
+    };
+    row.addEventListener('pointerup', end);
+    row.addEventListener('pointercancel', (e) => { clearTimeout(timer); if (st?.dir === 'h') end(e); st = null; });
+    row.addEventListener('click', (e) => { if (swallow) { e.preventDefault(); e.stopPropagation(); swallow = false; } }, true);
+    row.addEventListener('contextmenu', (e) => e.preventDefault());
+    wrap.querySelector('.sw-del').addEventListener('click', async () => {
+      const proj = byId(id);
+      if (proj && await confirmRemoveProject(proj)) route();
+      else closeOpen();
+    });
+  });
 }
 
 // ---------- 백업 ----------
@@ -333,10 +435,7 @@ async function viewProject(pid) {
         buttons: [{ label: '취소', value: false }, { label: '삭제', value: true, danger: true }],
       });
       if (!ok) return;
-      for (const x of parts) await db.del('parts', x.id);
-      await db.del('files', proj.fileId);
-      forgetPdf(proj.fileId);
-      await db.del('projects', proj.id);
+      await removeProject(proj);
       go('#/');
     }
   });

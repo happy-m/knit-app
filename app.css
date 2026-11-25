@@ -390,3 +390,10 @@ textarea.input.area { padding: 12px; min-height: 120px; line-height: 1.5; resize
 .circ-n label { flex: 1; }
 .circ-n .input { width: 80px; text-align: center; }
 .pin-row .pin-col { flex: 1; }
+/* 첫 화면: 왼쪽으로 밀어 삭제 */
+.swipe { position: relative; margin: 0; border-radius: 16px; overflow: hidden; }
+.swipe .sw-row { margin: 0; position: relative; z-index: 1; touch-action: pan-y; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.swipe .sw-row a { -webkit-touch-callout: none; -webkit-user-drag: none; }
+.sw-del { position: absolute; top: 0; right: 0; bottom: 0; width: 96px; border: 0; border-radius: 0 16px 16px 0; background: var(--mark); color: #fff;
+  font-size: 16px; font-weight: 700; padding-left: 8px; visibility: hidden; }
+.swipe.open .sw-del, .swipe:has(.sw-row[style*="translateX"]) .sw-del { visibility: visible; }
