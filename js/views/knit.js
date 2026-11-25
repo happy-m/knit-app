@@ -14,6 +14,7 @@ import { memosOf, editMemo, memoList, rowMenu, memoCardHtml, memoHint } from '..
 import { toggleLegend } from '../legend.js';
 import { keypad, openDoc } from '../dialogs.js';
 import { videoMenu } from '../videoui.js';
+import { pinControl } from '../pins.js';
 
 // ---- 세 가지 뜨기 화면이 함께 쓰는 것 ----
 
@@ -134,11 +135,12 @@ export async function viewCircKnit(part) {
       const [x, y] = [g.Bpx[0] + g.rpx(m.row - 0.5), g.Bpx[1]];
       paths += `<g class="rg-memo"><circle cx="${x}" cy="${y}" r="10"/><text x="${x}" y="${y + 4}" text-anchor="middle">✎</text></g>`;
     }
-    return `<svg class="ring-ov" width="${w}" height="${ht}">${paths}</svg>`;
+    return `<svg class="ring-ov" width="${w}" height="${ht}">${paths}</svg>` + pins.html(0, v.n2p.bind(v));
   };
 
   const rowcard = app.querySelector('#rowcard');
   const showMemo = memoCard(part, () => p().row, () => refresh());
+  const pins = pinControl(part, () => save(), () => cv.redraw());
   const nextBtn = app.querySelector('#next');
   // 지금 단의 고리가 보이도록 (오른쪽 끝 기준)
   const follow = () => {
@@ -167,7 +169,10 @@ export async function viewCircKnit(part) {
   const cv = new ChartView(app.querySelector('#chart'), {
     doc, pageNum: sg.page, area: sg.area, decorate,
     onScale: (sc) => { try { localStorage.setItem(key, String(sc)); } catch {} },
-    onTap: () => toast('다른 단으로 가려면 그 단을 <b>길게</b> 누르세요'),
+    onTap: (nx, ny) => {
+      if (pins.armed()) return pins.place({ seg: 0, x: nx, y: ny, label: `${ringGeom(ring, sz.w, sz.h).roundAt(nx, ny)}단` });
+      toast('다른 단으로 가려면 그 단을 <b>길게</b> 누르세요');
+    },
     onLong: async (nx, ny) => {
       const r = ringGeom(ring, sz.w, sz.h).roundAt(nx, ny);
       if (r === p().row && !p().done) return;
@@ -199,6 +204,7 @@ export async function viewCircKnit(part) {
   });
   rowcard.addEventListener('click', async () => {
     const act = await rowMenu(part, p().row);
+    if (await pins.handle(act)) return;
     let r;
     if (act === 'memo') { if (await editMemo(part, p().row)) refresh(); return; }
     if (act === 'list') r = await memoList(part, true, p().row);
@@ -282,11 +288,12 @@ export async function viewKnit(id) {
       const y = v.n2p(0, R.at(m.row))[1];
       h += `<span class="memo-dot" style="left:4px;top:${y}px">✎</span><span class="memo-dot" style="left:${w - 26}px;top:${y}px">✎</span>`;
     }
-    return h;
+    return h + pins.html(seg, v.n2p.bind(v));
   };
 
   const rowcard = app.querySelector('#rowcard');
   const showMemo = memoCard(part, () => p().row, () => refresh(false));
+  const pins = pinControl(part, () => save(), () => cv.redraw());
   const nextBtn = app.querySelector('#next');
   const prevBtn = app.querySelector('#prev');
   const dirEl = app.querySelector('#dir');
@@ -342,6 +349,12 @@ export async function viewKnit(id) {
       doc, pageNum: vp.page, area: vp.cal.area, decorate,
       onScale: (sc) => { try { rowPx = sc * pitchPt; localStorage.setItem(key, String(rowPx)); } catch {} },
       onTap: async (nx, ny) => {
+        if (pins.armed()) {
+          // 칸 한가운데에 맞춰 꽂는다
+          const pr0 = clamp(R.nearest(ny), R.lo, R.hi);
+          const pc0 = clamp(C.nearest(nx), C.lo, C.hi);
+          return pins.place({ seg, x: C.at(pc0), y: R.at(pr0), label: `${pr0}단 ${pc0}번 칸` });
+        }
         const pr = p();
         if (pr.done) return;
         const r = R.nearest(ny);
@@ -422,6 +435,7 @@ export async function viewKnit(id) {
   });
   rowcard.addEventListener('click', async () => {
     const act = await rowMenu(part, p().row);
+    if (await pins.handle(act)) return;
     let r;
     if (act === 'memo') { if (await editMemo(part, p().row)) refresh(false); return; }
     if (act === 'list') r = await memoList(part, true, p().row);
@@ -482,7 +496,7 @@ export async function viewTextKnit(part) {
   // 읽는 줄 강조: 줄 위아래를 흐리게 덮어 그 줄 글자만 또렷하게 보이게 한다 (글자 위에는 아무것도 안 덮음)
   const decorate = (i, v) => {
     const L = p().line;
-    let h = sizeMarks(i, v);
+    const h = sizeMarks(i, v) + pins.html(i, v.n2p);
     if (!L) return h;
     const [w, ht] = v.size();
     if ((L.seg ?? 0) !== i) return `<i class="ruler-dim" style="left:0;top:0;width:${w}px;height:${ht}px"></i>` + h;
@@ -497,6 +511,7 @@ export async function viewTextKnit(part) {
   };
   const rowcard = app.querySelector('#rowcard');
   const showMemo = memoCard(part, () => p().row, () => refresh(false));
+  const pins = pinControl(part, () => save(), () => cv.redraw());
   const nextBtn = app.querySelector('#next');
   const refresh = () => {
     const pr = p();
@@ -519,6 +534,7 @@ export async function viewTextKnit(part) {
     doc, pieces: segs.map((sg) => ({ page: sg.page, area: sg.area })), decorate,
     onScale: (sc) => { try { localStorage.setItem(zKey, String(sc)); } catch {} },
     onTap: async (i, nx, ny) => {
+      if (pins.armed()) return pins.place({ seg: i, x: nx, y: ny, label: `${segs[i].page}쪽` });
       const lines = (await linesP)[i] || [];
       let L = null;
       if (lines.length) {
@@ -589,6 +605,7 @@ export async function viewTextKnit(part) {
   });
   rowcard.addEventListener('click', async () => {
     const act = await rowMenu(part, p().row);
+    if (await pins.handle(act)) return;
     let r;
     if (act === 'memo') { if (await editMemo(part, p().row)) refresh(); return; }
     if (act === 'list') r = await memoList(part, true, p().row);

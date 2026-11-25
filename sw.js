@@ -1,11 +1,11 @@
 // 앱 파일을 폰에 저장해 두고 인터넷 없이도 열리게 한다.
 // 코드를 고친 뒤에는 scripts/bump.py로 버전을 올린다 (CHANGELOG.md 참고).
-const VERSION = 'knit-1.21.1';
+const VERSION = 'knit-1.22.0';
 const ASSETS = [
   './', 'index.html', 'app.css', 'manifest.webmanifest',
   'js/backup.js', 'js/chartview.js', 'js/circ.js', 'js/core.js', 'js/db.js', 'js/dialogs.js',
   'js/knitting.js', 'js/labels.js', 'js/legend.js', 'js/main.js', 'js/memo.js', 'js/partnav.js',
-  'js/pdf.js', 'js/sizes.js', 'js/stackview.js', 'js/ui.js', 'js/version.js', 'js/videos.js',
+  'js/pdf.js', 'js/pins.js', 'js/sizes.js', 'js/stackview.js', 'js/ui.js', 'js/version.js', 'js/videos.js',
   'js/videoui.js', 'js/views/cal.js', 'js/views/home.js', 'js/views/info.js', 'js/views/knit.js', 'js/views/project.js',
   'vendor/jsQR.min.js',
   'vendor/pdf.min.mjs', 'vendor/pdf.worker.min.mjs',

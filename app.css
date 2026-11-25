@@ -420,3 +420,12 @@ textarea.input.area { padding: 12px; min-height: 120px; line-height: 1.5; resize
 .vid-row { display: flex; align-items: center; gap: 4px; background: var(--white); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 8px; padding-right: 4px; }
 .vid-open { flex: 1; min-width: 0; text-align: left; border: 0; background: none; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; color: var(--ink); font-size: 15px; }
 .vid-open b, .vid-open span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 도안 핀 (S: 오늘 시작한 곳, E: 여기까지 뜸) — 뾰족한 끝이 꽂은 자리를 가리킨다 */
+.cv-ov .kpin { width: 0; height: 0; z-index: 3; }
+.cv-ov .kpin b { position: absolute; left: -13px; top: -34px; width: 26px; height: 26px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
+  display: grid; place-items: center; color: #fff; font-size: 13px; font-weight: 800; box-shadow: 0 2px 5px rgba(0,0,0,.3); border: 2px solid #fff; }
+.cv-ov .kpin b::after { content: attr(data-k); }
+.cv-ov .kpin-S b { background: #3E7CB1; }
+.cv-ov .kpin-E b { background: var(--mark); }
+.cv-ov .kpin b i { position: static; transform: rotate(45deg); font-style: normal; }
+.cv-ov .kpin b::after { content: none; }

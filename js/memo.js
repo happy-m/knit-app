@@ -1,6 +1,7 @@
 // 단 메모
 import * as db from './db.js';
 import { esc, toast, sheet } from './ui.js';
+import { pinMenuItems } from './pins.js';
 
 export const memosOf = (part) => (Array.isArray(part.memos) ? part.memos : (part.memos = []));
 
@@ -82,6 +83,7 @@ export async function rowMenu(part, row) {
     { label: '다른 단으로 이동 (번호 입력)', value: 'jump' },
     { label: '메모 달기 (단 번호를 적어서)', value: 'memo' },
     ...(n ? [{ label: `메모 전체 보기 (${n}개)`, value: 'list' }] : []),
+    ...pinMenuItems(part),
   ]);
 }
 
