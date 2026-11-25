@@ -25,7 +25,15 @@ export function ringGeom(r, W, H) {
     const d = dist([nx * W, ny * H]);
     return Math.max(1, Math.min(r.n, Math.ceil((d / p0 - off) / gap)));
   };
-  return { A, B, p0, radius, roundAt };
+  // k단의 한가운데(안팎 테두리 사이)를 지나는 한 점, 페이지 좌표(0~1). B 쪽 끝에서 잡는다
+  const midPoint = (k) => {
+    let ux = B[0] - A[0], uy = B[1] - A[1];
+    const L = Math.hypot(ux, uy);
+    if (L < 1) { ux = 1; uy = 0; } else { ux /= L; uy /= L; }
+    const rr = (off + (k - 0.5) * gap) * p0;
+    return [(B[0] + ux * rr) / W, (B[1] + uy * rr) / H];
+  };
+  return { A, B, p0, radius, roundAt, midPoint };
 }
 
 // 트랙(스타디움) 모양 고리 경로. A·B·r은 화면 px

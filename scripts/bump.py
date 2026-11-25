@@ -5,7 +5,7 @@
 - minor: 새 기능
 - patch: 버그 수정, 문구·디자인 손보기
 
-js/main.js의 APP_VERSION, sw.js의 VERSION(캐시 이름)을 함께 바꾸고
+js/version.js의 APP_VERSION, sw.js의 VERSION(캐시 이름)을 함께 바꾸고
 CHANGELOG.md 맨 위에 항목을 추가한다. 커밋과 태그(vX.Y.Z)는 직접 한다.
 """
 import datetime, pathlib, re, sys
@@ -16,14 +16,14 @@ note = sys.argv[2] if len(sys.argv) > 2 else ''
 if kind not in ('major', 'minor', 'patch') or not note:
     sys.exit(__doc__)
 
-main = ROOT / 'js/main.js'
+main = ROOT / 'js/version.js'
 src = main.read_text()
-cur = re.search(r"const APP_VERSION = '(\d+)\.(\d+)\.(\d+)';", src)
+cur = re.search(r"export const APP_VERSION = '(\d+)\.(\d+)\.(\d+)';", src)
 ma, mi, pa = map(int, cur.groups())
 ma, mi, pa = {'major': (ma + 1, 0, 0), 'minor': (ma, mi + 1, 0), 'patch': (ma, mi, pa + 1)}[kind]
 new = f'{ma}.{mi}.{pa}'
 
-main.write_text(src.replace(cur.group(0), f"const APP_VERSION = '{new}';"))
+main.write_text(src.replace(cur.group(0), f"export const APP_VERSION = '{new}';"))
 sw = ROOT / 'sw.js'
 sw.write_text(re.sub(r"const VERSION = 'knit-[^']*';", f"const VERSION = 'knit-{new}';", sw.read_text()))
 

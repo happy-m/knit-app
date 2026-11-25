@@ -25,7 +25,18 @@ PDF 뜨개 도안을 보면서 지금 뜨는 단과 코 위치를 표시하는 �
 | 파일 | 역할 |
 | --- | --- |
 | `index.html`, `app.css` | 화면 틀과 스타일 |
-| `js/main.js` | 화면 이동과 각 화면(작품 목록, 파트, 격자 맞추기, 뜨기) |
+| `js/main.js` | 시작점: 주소(#/…)와 화면 잇기, 서비스 워커, 시작 화면 |
+| `js/core.js` | 공통: 화면 이동, 라우터, 머리줄 |
+| `js/views/home.js` | 첫 화면(작품 목록), 새 작품, 백업 |
+| `js/views/project.js` | 작품 화면(파트 목록), 내 사이즈, 파트 추가·고치기 |
+| `js/views/info.js` | 작품 정보 탭(실·바늘·게이지·메모·영상·기간), 사진 |
+| `js/views/cal.js` | 격자 맞추기(기호 차트·원형 차트), 글 설명 영역 |
+| `js/views/knit.js` | 뜨기 화면 세 가지(기호 차트·원형 차트·글 설명) |
+| `js/partnav.js` | 파트 상태 글귀와 화면 주소 |
+| `js/labels.js` | PDF 글자에서 단·코 번호와 글줄 읽기 |
+| `js/memo.js`, `js/legend.js`, `js/videoui.js`, `js/dialogs.js` | 단 메모, 기호 설명, 참고 영상, 공용 창 |
+| `js/circ.js`, `js/sizes.js`, `js/videos.js`, `js/backup.js`, `js/stackview.js` | 원형 차트 계산, 사이즈 숫자 읽기, QR·링크 찾기, 백업 파일, 이어 붙여 보기 |
+| `js/version.js` | 버전 (`scripts/bump.py`가 고친다) |
 | `js/chartview.js` | 도안 영역 확대·이동, 띠와 코 표시 그리기 |
 | `js/knitting.js` | 격자 계산, 다음 단·이전 단·반복 규칙 |
 | `js/db.js` | 기기 안 저장소(IndexedDB) |
