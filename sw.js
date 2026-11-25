@@ -1,6 +1,6 @@
 // 앱 파일을 폰에 저장해 두고 인터넷 없이도 열리게 한다.
 // 코드를 고친 뒤에는 scripts/bump.py로 버전을 올린다 (CHANGELOG.md 참고).
-const VERSION = 'knit-1.24.1';
+const VERSION = 'knit-1.24.2';
 const ASSETS = [
   './', 'index.html', 'app.css', 'manifest.webmanifest',
   'js/backup.js', 'js/chartview.js', 'js/circ.js', 'js/core.js', 'js/db.js', 'js/dialogs.js',

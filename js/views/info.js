@@ -225,8 +225,10 @@ export async function viewInfo(pid) {
     if (app.querySelector('#d-start')) { info.start = v('#d-start'); info.end = v('#d-end'); }
   };
   let t;
-  const save = async () => {
-    collect();
+  // 화면에 적힌 값을 읽어 저장한다
+  const save = async () => { collect(); await persist(); };
+  // 지금 info를 그대로 저장한다 (줄을 더하거나 뺀 직후에는 화면과 순서가 달라서 다시 읽으면 안 된다)
+  const persist = async () => {
     const fresh = await db.get('projects', pid);
     if (!fresh) return;
     fresh.videos = proj.videos;
@@ -250,7 +252,7 @@ export async function viewInfo(pid) {
       const key = b.dataset.add;
       if (key === 'memos') info.memos.unshift({ id: db.uid(), text: '', at: Date.now(), photos: [] });
       else info[key].push(key === 'needles' ? { kind: info.needles.at(-1)?.kind || '줄바늘' } : {});
-      await save();
+      await persist();
       render();
       const rows = app.querySelectorAll(`#${key} .rep-row`);
       (key === 'memos' ? rows[0] : rows[rows.length - 1])?.querySelector('input, textarea')?.focus();
@@ -267,7 +269,7 @@ export async function viewInfo(pid) {
       }
       for (const id of item.photos || []) await db.del('files', id);
       info[key].splice(i, 1);
-      await save();
+      await persist();
       render();
     }));
     f.querySelectorAll('[data-vopen]').forEach((b) => b.addEventListener('click', () => window.open(proj.videos[+b.dataset.vopen].url, '_blank', 'noopener')));
@@ -314,7 +316,7 @@ export async function viewInfo(pid) {
       }
       wait.remove();
       if (fail) toast(`사진 ${fail}장은 열 수 없어 넣지 못했습니다`);
-      await save();
+      await persist();
       render();
     }));
     f.querySelectorAll('[data-photo]').forEach((b) => b.addEventListener('click', async () => {
@@ -326,7 +328,7 @@ export async function viewInfo(pid) {
       const list = listOf(b.closest('.photos').dataset.where);
       list.splice(list.indexOf(id), 1);
       await db.del('files', id);
-      await save();
+      await persist();
       render();
     }));
   };
