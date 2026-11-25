@@ -4,18 +4,9 @@ import { toast } from './ui.js';
 const KINDS = { S: 'Start', E: 'End', M1: 'Marker 1', M2: 'Marker 2' };
 const stamp = (at) => { const d = new Date(at); return `${d.getMonth() + 1}.${d.getDate()}`; };
 
-// 단 카드 메뉴에 넣는 항목
-export function pinMenuItems(part) {
-  const pins = part.pins || {};
-  return Object.entries(KINDS).flatMap(([k, name]) => {
-    const pin = pins[k];
-    if (!pin) return [{ label: `${name} 핀 꽂기`, value: `pin${k}` }];
-    return [
-      { label: `${name} 핀 옮기기`, sub: `${pin.label ? `${pin.label} · ` : ''}${stamp(pin.at)}에 꽂음`, value: `pin${k}` },
-      { label: `${name} 핀 빼기`, value: `unpin${k}`, danger: true },
-    ];
-  });
-}
+export const PIN_KINDS = KINDS;
+// 핀이 꽂힌 자리를 짧게: "7단 1칸"
+export const pinWhere = (pin) => (pin.label || '').replace('번 칸', '칸') || `${stamp(pin.at)}`;
 
 // 뜨기 화면 하나에서 쓰는 핀 조작기. save(): 파트 저장, redraw(): 차트 다시 그리기
 export function pinControl(part, save, redraw) {

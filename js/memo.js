@@ -1,7 +1,7 @@
 // 단 메모
 import * as db from './db.js';
 import { esc, toast, sheet } from './ui.js';
-import { pinMenuItems } from './pins.js';
+import { PIN_KINDS, pinWhere } from './pins.js';
 
 export const memosOf = (part) => (Array.isArray(part.memos) ? part.memos : (part.memos = []));
 
@@ -77,14 +77,48 @@ export async function memoList(part, canJump, curRow = 1) {
 }
 
 // 단 카드를 눌렀을 때: 단 이동 / 메모
-export async function rowMenu(part, row) {
-  const n = memosOf(part).length;
-  return sheet(`지금 ${row}단`, [
-    { label: '다른 단으로 이동 (번호 입력)', value: 'jump' },
-    { label: '메모 입력', value: 'memo' },
-    ...(n ? [{ label: `메모 전체 보기 (${n}개)`, value: 'list' }] : []),
-    ...pinMenuItems(part),
-  ]);
+// 단 카드를 눌렀을 때 뜨는 도구 시트: 단 이동, 메모 입력, 핀 네 칸
+// 돌려주는 값: 'jump' | 'memo' | 'list' | 'pinS' | 'unpinS' … | undefined
+export function rowMenu(part, row) {
+  return new Promise((resolve) => {
+    const n = memosOf(part).length;
+    const pins = part.pins || {};
+    const el = document.createElement('div');
+    el.className = 'scrim sheet-scrim';
+    el.innerHTML = `<div class="sheet tool-sheet" role="dialog" aria-modal="true">
+      <div class="sheet-title">지금 ${row}단</div>
+      <div class="tool-tiles">
+        <button type="button" class="tool-tile" data-v="jump"><span aria-hidden="true">⇅</span>단 이동</button>
+        <button type="button" class="tool-tile" data-v="memo"><span aria-hidden="true">✎</span>메모 입력</button>
+      </div>
+      ${n ? `<button type="button" class="link-btn" data-v="list">메모 전체 보기 (${n}개)</button>` : ''}
+      <div class="label">핀 · 누르고 도안을 탭하면 꽂힙니다</div>
+      <div class="tool-pins">${Object.entries(PIN_KINDS).map(([k, name]) => {
+        const pin = pins[k];
+        return `<button type="button" class="tool-pin ${pin ? 'on' : 'off'}" data-pin="${k}" aria-label="${name} 핀${pin ? ` (${pinWhere(pin)})` : ' 꽂기'}">
+          <i class="tp-${k}">${k}</i><b>${name}</b><span>${pin ? esc(pinWhere(pin)) : '없음'}</span></button>`;
+      }).join('')}</div>
+      <button type="button" class="sheet-item sheet-cancel" data-x>닫기</button></div>`;
+    const done = (v) => { el.remove(); resolve(v); };
+    el.addEventListener('click', async (e) => {
+      const v = e.target.closest('[data-v]');
+      if (v) return done(v.dataset.v);
+      const pb = e.target.closest('[data-pin]');
+      if (pb) {
+        const k = pb.dataset.pin;
+        if (!pins[k]) return done(`pin${k}`);
+        // 꽂힌 핀: 옮길지 뺄지 고른다
+        el.remove();
+        const a = await sheet(`${PIN_KINDS[k]} 핀 · ${pinWhere(pins[k])}`, [
+          { label: '옮기기', value: `pin${k}` },
+          { label: '빼기', value: `unpin${k}`, danger: true },
+        ]);
+        return resolve(a);
+      }
+      if (e.target.closest('[data-x]') || e.target === el) done(undefined);
+    });
+    document.getElementById('layer').appendChild(el);
+  });
 }
 
 export function memoCardHtml(part, pr) {
