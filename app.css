@@ -377,3 +377,16 @@ textarea.input.area { padding: 12px; min-height: 120px; line-height: 1.5; resize
 .rc-top, .rc-jump { white-space: nowrap; }
 /* 알림이 화면 절반 폭에서 줄바꿈되지 않게: 글자 길이만큼 넓히고, 줄을 바꿀 때도 낱말 단위로 */
 .toast { width: max-content; max-width: calc(100vw - 32px); word-break: keep-all; }
+/* 원형 차트 고리 */
+.cv-ov svg.ring-ov { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.ring-ov .rg { fill: none; stroke: var(--mark); stroke-width: 2; }
+.ring-ov .rg-start { fill: none; stroke: var(--mark); stroke-width: 1.5; stroke-dasharray: 5 4; opacity: .7; }
+.ring-ov .rg-done { fill: rgba(243, 244, 240, 0.62); }
+.ring-ov .rg-now { fill: rgba(255, 228, 92, 0.16); }
+.ring-ov .rg-line { fill: none; stroke: #E8B400; stroke-width: 3; }
+.ring-ov .rg-memo circle { fill: var(--mark); }
+.ring-ov .rg-memo text { fill: #fff; font-size: 11px; font-weight: 800; }
+.circ-n { align-items: center; font-weight: 700; font-size: 14px; }
+.circ-n label { flex: 1; }
+.circ-n .input { width: 80px; text-align: center; }
+.pin-row .pin-col { flex: 1; }

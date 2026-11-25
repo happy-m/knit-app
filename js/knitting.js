@@ -47,6 +47,10 @@ export function axis(pair, key) {
 }
 
 export const isText = (part) => part.kind === 'text';
+export const isCirc = (part) => part.kind === 'circ';
+// 'chart' | 'text' | 'circ'
+export const kindOf = (part) => (isText(part) ? 'text' : isCirc(part) ? 'circ' : 'chart');
+const ringOk = (r) => !!(r && r.a && r.b && r.c && Number.isInteger(r.n) && r.n >= 1);
 
 // ---- 구간 ----
 // 파트 하나가 여러 페이지(또는 한 페이지의 일부)에 걸칠 수 있다.
@@ -55,6 +59,7 @@ export const isText = (part) => part.kind === 'text';
 export function segsOf(part) {
   if (!Array.isArray(part.segs) || !part.segs.length) {
     if (isText(part)) part.segs = [{ page: part.page, area: part.text?.area || null }];
+    else if (isCirc(part)) part.segs = [{ page: part.page, area: null, ring: null }];
     else {
       const c = part.cal || {};
       part.segs = [{ page: part.page, area: c.area || null, rows: c.rows || null, cols: c.cols || null }];
@@ -77,13 +82,14 @@ export function segPart(part, i) {
 
 export function segReady(part, s) {
   if (isText(part)) return !!s.area;
+  if (isCirc(part)) return !!(s.area && ringOk(s.ring));
   return !!(s.area && validPair(s.rows, 'y') && validPair(s.cols, 'x'));
 }
 
 export function calibrated(part) {
   const segs = segsOf(part);
   if (!segs.every((s) => segReady(part, s))) return false;
-  return isText(part) ? true : !!part.cal?.mode;
+  return isText(part) || isCirc(part) ? true : !!part.cal?.mode;
 }
 
 export function validPair(pair, key) {
@@ -97,6 +103,7 @@ export function validPair(pair, key) {
 
 // 구간 하나(segPart)면 그 구간의 격자, 파트 전체면 모든 구간을 합친 단 범위({lo, hi})
 export function rowsOf(part) {
+  if (isCirc(part)) return { lo: 1, hi: segsOf(part)[0]?.ring?.n || 1 };
   if (part.segIndex !== undefined) return axis(part.cal.rows, 'y');
   const ax = segsOf(part).filter((s) => validPair(s.rows, 'y')).map((s) => axis(s.rows, 'y'));
   if (!ax.length) return { lo: 1, hi: 1 };
@@ -142,7 +149,7 @@ export function knitIndex(part, p = part.progress) {
 // 지금 단을 겉면에서 뜨는지. 원통뜨기는 항상 겉면
 export function isRightSide(part, p = part.progress) {
   const m = part.cal.mode;
-  if (m.type === 'round') return true;
+  if (!m || m.type === 'round') return true;
   return (knitIndex(part, p) % 2 === 0) === (m.first !== 'WS');
 }
 

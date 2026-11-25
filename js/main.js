@@ -6,13 +6,14 @@ import { esc, icon, ro, eul, toast, dialog, ask, sheet, clearLayer } from './ui.
 import {
   calibrated, validPair, axis, rowsOf, colsOf, startProgress, knitIndex, isRightSide,
   repeatTotal, nextRow, prevRow, jumpTo, partStatus, isText,
-  segsOf, segPart, segReady, segForRow, pagesLabel,
+  segsOf, segPart, segReady, segForRow, pagesLabel, isCirc, kindOf,
 } from './knitting.js';
 import { StackView } from './stackview.js';
+import { validRing, ringOnView, stadium } from './circ.js';
 import { readSizeGroups, findSizeInfo } from './sizes.js';
 import { scanVideos, isYoutube, hostOf } from './videos.js';
 
-const APP_VERSION = '1.14.4';
+const APP_VERSION = '1.15.0';
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -64,7 +65,8 @@ function header(back, title, sub = '', right = '') {
 function partMeta(part) {
   const pages = pagesLabel(part);
   if (isText(part)) return `글 설명 · ${pages}${part.text?.goal ? ` · 목표 ${part.text.goal}단` : ''}`;
-  if (!calibrated(part)) return `${pages} · 설정 중`;
+  if (!calibrated(part)) return `${isCirc(part) ? '원형 · ' : ''}${pages} · 설정 중`;
+  if (isCirc(part)) return `원형 · 1~${rowsOf(part).hi}단 · ${pages}`;
   const R = rowsOf(part);
   const m = part.cal.mode;
   const rep = repeatTotal(part);
@@ -76,6 +78,7 @@ function partHref(part) {
   if (calibrated(part)) return `#/k/${part.id}`;
   const i = segsOf(part).findIndex((s) => !segReady(part, s));
   if (isText(part)) return `#/txt/${part.id}/${Math.max(0, i)}`;
+  if (isCirc(part)) return calUrl(part.id, segsOf(part)[0].area ? 2 : 1, 0);
   return i < 0 ? `#/cal/${part.id}/4` : `#/cal/${part.id}/1/${i}`;
 }
 
@@ -607,7 +610,7 @@ async function partForm(pid, editing) {
     <div class="page"><div class="wrap">
       <div class="field"><label for="ptname">파트 이름</label><input id="ptname" class="input" autocomplete="off" placeholder="예: 뒷판" value="${esc(editing?.name || '')}"></div>
       <div class="field"><span class="label">도안 형태</span>
-        <div class="seg"><button type="button" data-kind="chart" aria-pressed="true">기호 차트</button><button type="button" data-kind="text" aria-pressed="false">글 설명만</button></div></div>
+        <div class="seg"><button type="button" data-kind="chart" aria-pressed="true">기호 차트</button><button type="button" data-kind="circ" aria-pressed="false">원형 차트</button><button type="button" data-kind="text" aria-pressed="false">글 설명만</button></div></div>
       <div class="label" id="pagelabel">차트가 있는 페이지를 고르세요</div>
       <p class="hint">페이지를 탭하면 크게 보고 고를 수 있습니다. 다음 쪽으로 이어지면 <b>순서대로 여러 장</b> 고르세요. 고른 페이지를 다시 누르면 빠집니다.${editing ? ' 그대로 둔 페이지는 영역·격자 설정이 유지됩니다.' : ''}</p>
       <div class="pick-order" id="order" hidden></div>
@@ -617,18 +620,21 @@ async function partForm(pid, editing) {
     <div class="footer"><button class="btn primary" id="next" disabled>다음: 영역 지정</button></div>`;
   const nameIn = app.querySelector('#ptname');
   const nextBtn = app.querySelector('#next');
-  let kind = editing ? (isText(editing) ? 'text' : 'chart') : 'chart';
+  let kind = editing ? kindOf(editing) : 'chart';
   const setKind = (k) => {
     kind = k;
     app.querySelectorAll('[data-kind]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.kind === k)));
-    app.querySelector('#pagelabel').textContent = kind === 'text' ? '설명이 있는 페이지를 고르세요' : '차트가 있는 페이지를 고르세요';
+    app.querySelector('#pagelabel').textContent = kind === 'text' ? '설명이 있는 페이지를 고르세요'
+      : kind === 'circ' ? '원형 차트가 있는 페이지를 고르세요 (한 장)' : '차트가 있는 페이지를 고르세요';
+    // 원형 차트는 한 페이지만 쓴다
+    if (kind === 'circ' && pages.length > 1) pages.splice(1);
   };
   app.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => {
     setKind(b.dataset.kind);
     check();
   }));
   // 고치기에서 더 설정할 게 남는지: 새 페이지가 있거나 형태가 바뀌면 설정 화면으로 이어간다
-  const needsSetup = () => !editing || kind !== (isText(editing) ? 'text' : 'chart') ||
+  const needsSetup = () => !editing || kind !== kindOf(editing) ||
     pages.some((pg) => !segsOf(editing).some((x) => x.page === pg && segReady(editing, x))) || !calibrated(editing);
   const check = () => {
     nextBtn.disabled = !(nameIn.value.trim() && pages.length);
@@ -662,14 +668,16 @@ async function partForm(pid, editing) {
         check();
         return;
       }
-      const ok = await previewPage(doc, p, pages.length ? `${pages.length + 1}번째로 고르기` : '이 페이지로 고르기');
+      const ok = await previewPage(doc, p, pages.length && kind !== 'circ' ? `${pages.length + 1}번째로 고르기` : '이 페이지로 고르기');
       if (!ok) return;
+      if (kind === 'circ') pages.length = 0;
       pages.push(p);
       check();
       if (!nameIn.value.trim()) nameIn.focus();
     });
   });
-  const blank = (pg) => (kind === 'text' ? { page: pg, area: null } : { page: pg, area: null, rows: null, cols: null });
+  const blank = (pg) => (kind === 'text' ? { page: pg, area: null } : kind === 'circ' ? { page: pg, area: null, ring: null }
+    : { page: pg, area: null, rows: null, cols: null });
   nextBtn.addEventListener('click', async () => {
     if (!editing) {
       const part = {
@@ -682,11 +690,11 @@ async function partForm(pid, editing) {
       return location.replace(partHref(part));
     }
     const part = editing;
-    const oldKind = isText(part) ? 'text' : 'chart';
+    const oldKind = kindOf(part);
     if (kind !== oldKind) {
       const ok = await dialog({
         title: '도안 형태 바꾸기',
-        body: `${kind === 'text' ? '글 설명' : '기호 차트'}로 바꾸면 ${oldKind === 'chart' ? '격자 설정과 ' : ''}진행 위치가 처음으로 돌아갑니다. 영역은 그대로 둡니다.`,
+        body: `${{ text: '글 설명', circ: '원형 차트', chart: '기호 차트' }[kind]}로 바꾸면 ${oldKind !== 'text' ? '격자 설정과 ' : ''}진행 위치가 처음으로 돌아갑니다. 영역은 그대로 둡니다.`,
         buttons: [{ label: '취소', value: false }, { label: '바꾸기', value: true, primary: true }],
       });
       if (!ok) return;
@@ -699,7 +707,8 @@ async function partForm(pid, editing) {
       if (j < 0) return blank(pg);
       used.set(j, ni);
       const x = { ...old[j] };
-      return kind === 'text' ? { page: x.page, area: x.area } : kind !== oldKind ? { page: x.page, area: x.area, rows: null, cols: null } : x;
+      if (kind === oldKind) return x;
+      return { ...blank(x.page), area: x.area };
     });
     part.name = nameIn.value.trim();
     part.segs = segs;
@@ -734,8 +743,8 @@ async function partForm(pid, editing) {
 
 // ---------- 격자 맞추기 1~4단계 ----------
 const STEP_LABELS = ['영역', '단 번호', '코 번호', '뜨는 방식'];
-function stepsHtml(now) {
-  return `<div class="steps">${STEP_LABELS.map((l, i) => {
+function stepsHtml(now, labels = STEP_LABELS) {
+  return `<div class="steps">${labels.map((l, i) => {
     const n = i + 1;
     const cls = n < now ? 'done' : n === now ? 'now' : '';
     return `<div class="step ${cls}"><span class="num">${n}</span><span>${l}</span></div>`;
@@ -751,6 +760,11 @@ async function viewCal(id, stepStr, segStr) {
   part.cal = part.cal || {};
   const segs = segsOf(part);
   const seg = clamp(+(segStr || 0), 0, segs.length - 1);
+  if (isCirc(part)) {
+    if (step > 1 && !segs[0].area) return location.replace(calUrl(id, 1, 0));
+    if (step > 2) return location.replace(calUrl(id, 2, 0));
+    if (step === 2) return calCirc(part, proj, doc);
+  }
   // 앞 단계가 안 된 상태로 들어오면 그 단계로 돌려보낸다
   for (let i = 0; i < segs.length && (step === 4 || i <= seg); i++) {
     const sg = segs[i];
@@ -777,7 +791,7 @@ async function viewCal(id, stepStr, segStr) {
     return db.put('parts', part);
   };
   const segTxt = segs.length > 1 ? ` · 구간 ${seg + 1}/${segs.length}` : '';
-  const top = header(back, '격자 맞추기', `${esc(part.name)} · ${vp.page}쪽${segTxt}`) + stepsHtml(step) +
+  const top = header(back, '격자 맞추기', `${esc(part.name)} · ${vp.page}쪽${segTxt}`) + stepsHtml(step, isCirc(part) ? ['영역', '단 맞추기'] : STEP_LABELS) +
     segChips(part, seg, (sg) => !!(sg.area && validPair(sg.rows, 'y') && validPair(sg.cols, 'x')));
   if (step === 1) return calArea(vp, proj, doc, top, save);
   return calPoints(vp, doc, top, save, step);
@@ -790,7 +804,7 @@ async function calArea(part, proj, doc, top, save) {
     <p class="hint pad">손가락으로 끌어서 그리고, 모서리를 끌어 크기를 고칩니다. 번호 칸이 글자로 읽히는 도안이면 위아래로 떨어진 차트도 한 파트로 묶을 수 있습니다. 사이의 빈 공간은 번호 칸 위치로 맞춥니다.</p>
     <button type="button" class="link-btn" id="autoarea">차트 영역 자동으로 다시 잡기</button>
     <div class="footer"><button type="button" class="btn" id="pg">페이지 다시 고르기</button>
-      <button type="button" class="btn primary" id="next" ${part.cal.area ? '' : 'disabled'}>다음: 단 번호</button></div>`;
+      <button type="button" class="btn primary" id="next" ${part.cal.area ? '' : 'disabled'}>${isCirc(part) ? '다음: 단 맞추기' : '다음: 단 번호'}</button></div>`;
   const box = app.querySelector('#pv');
   const nextBtn = app.querySelector('#next');
   let A = part.cal.area ? { ...part.cal.area } : null;
@@ -1373,11 +1387,334 @@ function nearestLabel(labels, nx, ny) {
   return bd <= 4 ? best : null;
 }
 
+// ---------- 원형 차트: 단 맞추기 ----------
+// A·B: 시작 사슬 줄 양 끝 (원형이면 가운데 한 점), C: 마지막 단의 바깥 테두리
+async function calCirc(part, proj, doc) {
+  const sg = segsOf(part)[0];
+  const ring = sg.ring || { n: null, off: 0, gap: 1 };
+  sg.ring = ring;
+  const sz = await pageSize(doc, sg.page);
+  const PINS = ['a', 'b', 'c'];
+  let active = PINS.find((k) => !ring[k]) || null;
+  const top = header(calUrl(part.id, 1, 0), '격자 맞추기', `${esc(part.name)} · ${sg.page}쪽`) + stepsHtml(2, ['영역', '단 맞추기']);
+  app.innerHTML = `${top}
+    <p class="lead" id="lead"></p>
+    <div class="cal-chart" id="chart"></div>
+    <div class="tune" role="group" aria-label="고리 미세 조정">
+      <span class="tune-l">미세 조정</span>
+      <button type="button" class="btn" data-tune="off-1" aria-label="고리를 안쪽으로">안쪽</button>
+      <button type="button" class="btn" data-tune="off1" aria-label="고리를 바깥쪽으로">바깥</button>
+      <button type="button" class="btn" data-tune="gap-1">간격 −</button>
+      <button type="button" class="btn" data-tune="gap1">간격 +</button>
+    </div>
+    <div class="pin-row">${PINS.map((k) => `<div class="pin-col"><button type="button" class="pin-btn" data-pin="${k}"></button></div>`).join('')}</div>
+    <div class="pin-row circ-n"><label for="ring-n">C는 몇 단의 바깥 테두리?</label>
+      <input class="input num" id="ring-n" inputmode="numeric" pattern="[0-9]*" placeholder="단" value="${ring.n ?? ''}"><span>단</span></div>
+    <div class="result" id="result"></div>
+    <div class="footer"><button type="button" class="btn" id="list">저장하고 목록으로</button><button type="button" class="btn primary" id="next">완료하고 뜨기 시작</button></div>`;
+  const resEl = app.querySelector('#result');
+  const nextBtn = app.querySelector('#next');
+  const lead = app.querySelector('#lead');
+  const save = async () => { part.updated = Date.now(); await db.put('parts', part); };
+  const tip = {
+    a: '<b>A</b>: 시작 사슬 줄의 <b>한쪽 끝</b>을 찍으세요. 원형(매직링)이면 <b>가운데</b>를 찍으세요.',
+    b: '<b>B</b>: 시작 사슬 줄의 <b>다른 쪽 끝</b>을 찍으세요. 원형이면 <b>A를 한 번 더</b> 찍으세요.',
+    c: '<b>C</b>: <b>마지막 단의 바깥 테두리</b> 한 곳을 찍고, 아래에 그 단 번호를 적으세요.',
+  };
+
+  const decorate = (v) => {
+    let h = '';
+    const [w, ht] = v.size();
+    if (validRing(ring)) {
+      const g = ringOnView(ring, v, sz.w, sz.h);
+      let paths = `<path d="${stadium(g.Apx, g.Bpx, Math.max(1.5, g.rpx(0)))}" class="rg-start"/>`;
+      if (ring.n <= 200) for (let k = 1; k <= ring.n; k++) paths += `<path d="${stadium(g.Apx, g.Bpx, g.rpx(k))}" class="rg"/>`;
+      h += `<svg class="ring-ov" width="${w}" height="${ht}">${paths}</svg>`;
+    }
+    for (const k of PINS) {
+      const q = ring[k];
+      if (!q) continue;
+      const [px, py] = v.n2p(q.x, q.y);
+      const ghost = active === k ? ' ghost' : '';
+      h += `<span class="pin-ring${ghost}" style="left:${px}px;top:${py}px"></span><span class="pin${ghost}" style="left:${px}px;top:${py}px">${k.toUpperCase()}</span>`;
+    }
+    return h;
+  };
+  const refresh = () => {
+    for (const k of PINS) {
+      const b = app.querySelector(`[data-pin=${k}]`);
+      b.setAttribute('aria-pressed', String(active === k));
+      b.innerHTML = `<span class="pin-dot">${k.toUpperCase()}</span>${active === k ? '찍을 차례' : ring[k] ? '다시 찍기' : '찍기'}`;
+    }
+    lead.innerHTML = active ? tip[active] : '빨간 고리가 각 단의 바깥 테두리와 맞는지 보세요. 어긋나면 미세 조정으로 맞추고, 점을 다시 찍어도 됩니다.';
+    cv.redraw();
+    const ok = validRing(ring);
+    nextBtn.disabled = !ok;
+    if (ok) {
+      const circle = Math.hypot((ring.a.x - ring.b.x) * sz.w, (ring.a.y - ring.b.y) * sz.h) < 2;
+      resEl.innerHTML = `${icon.check}<span>${circle ? '원형' : '타원형'} · 1단부터 ${ring.n}단까지 <b>${ring.n}단</b></span>`;
+      resEl.className = 'result ok';
+    } else {
+      const miss = PINS.filter((k) => !ring[k]).map((k) => k.toUpperCase());
+      resEl.textContent = miss.length ? `${miss.join(', ')} 지점을 찍어주세요.` : 'C가 몇 단의 테두리인지 적어주세요.';
+      resEl.className = 'result';
+    }
+  };
+  const cv = new ChartView(app.querySelector('#chart'), {
+    doc, pageNum: sg.page, area: sg.area, decorate,
+    onTap: async (nx, ny) => {
+      let k = active;
+      if (!k) {
+        // 다 찍혀 있으면 가장 가까운 점을 옮긴다
+        const d = (q) => Math.hypot((q.x - nx) * sz.w, (q.y - ny) * sz.h);
+        k = PINS.reduce((m, x) => (d(ring[x]) < d(ring[m]) ? x : m), 'a');
+      }
+      let pt = { x: nx, y: ny };
+      // B를 A 바로 옆에 찍으면 원형으로 보고 A와 같은 자리로
+      if (k === 'b' && ring.a) {
+        const px = Math.hypot((ring.a.x - nx) * sz.w, (ring.a.y - ny) * sz.h) * cv.s;
+        if (px < 22) pt = { ...ring.a };
+      }
+      ring[k] = pt;
+      active = PINS.find((x) => !ring[x]) || null;
+      if (k === 'c' && !ring.n) app.querySelector('#ring-n').focus();
+      await save();
+      refresh();
+    },
+  });
+  window.__cv = cv;
+  onCleanup(() => { cv.destroy(); if (window.__cv === cv) window.__cv = null; });
+  await cv.init();
+  app.querySelectorAll('[data-pin]').forEach((b) => b.addEventListener('click', () => {
+    active = active === b.dataset.pin ? null : b.dataset.pin;
+    refresh();
+  }));
+  app.querySelector('#ring-n').addEventListener('input', async (e) => {
+    const n = parseInt(e.target.value.replace(/\D/g, ''), 10);
+    ring.n = Number.isInteger(n) && n > 0 ? n : null;
+    await save();
+    refresh();
+  });
+  app.querySelectorAll('[data-tune]').forEach((b) => b.addEventListener('click', async () => {
+    if (!validRing(ring)) return;
+    const t = b.dataset.tune;
+    if (t.startsWith('off')) ring.off = +((ring.off || 0) + (t === 'off1' ? 0.1 : -0.1)).toFixed(2);
+    else ring.gap = +Math.max(0.2, (ring.gap || 1) * (t === 'gap1' ? 1.02 : 1 / 1.02)).toFixed(4);
+    await save();
+    refresh();
+  }));
+  const finish = async (dest) => {
+    if (!part.progress) part.progress = startProgress(part);
+    part.progress.row = clamp(part.progress.row, 1, ring.n);
+    await save();
+    go(dest);
+  };
+  app.querySelector('#list').addEventListener('click', () => finish(`#/p/${part.projectId}`));
+  nextBtn.addEventListener('click', () => finish(`#/k/${part.id}`));
+  refresh();
+}
+
+// ---------- 원형 차트: 뜨기 ----------
+async function viewCircKnit(part) {
+  const id = part.id;
+  if (!calibrated(part)) return location.replace(partHref(part));
+  const proj = await db.get('projects', part.projectId);
+  const parts = await db.partsOf(proj.id);
+  const doc = await loadPdf(proj.fileId);
+  const sg = segsOf(part)[0];
+  const ring = sg.ring;
+  const sz = await pageSize(doc, sg.page);
+  if (!part.progress) part.progress = startProgress(part);
+  const p = () => part.progress;
+  const R = { lo: 1, hi: ring.n };
+  const idx = parts.findIndex((x) => x.id === id);
+  const nextPart = parts[idx + 1];
+  proj.lastPartId = id;
+  proj.updated = Date.now();
+  await db.put('projects', proj);
+
+  app.innerHTML = `<div class="knit">
+    <div class="k-main">
+      <div class="k-top">
+        <a class="icon-btn" href="#/p/${proj.id}" aria-label="파트 목록으로">${icon.back}</a>
+        <button type="button" class="part-switch" id="sw" aria-label="다른 파트로 바꾸기">
+          <span class="ps-t"><span class="ps-name">${esc(part.name)}</span><span class="ps-sub">${proj.size ? `사이즈 ${esc(proj.size)} · ` : ''}파트 ${idx + 1}/${parts.length}</span></span>${icon.chev}</button>
+        <span class="k-spacer"></span>
+        <button type="button" class="btn" id="legbtn">기호</button>
+        <button type="button" class="btn" id="vidbtn">영상</button>
+        <button type="button" class="btn" id="docbtn">도안</button>
+      </div>
+      <div class="k-chart" id="chart"></div>
+      <button type="button" class="memo-card" id="memocard" hidden></button>
+    </div>
+    <div class="k-ctrl">
+      <button type="button" class="row-card" id="rowcard" aria-label="단 번호를 입력해 이동"></button>
+      <button type="button" class="next-btn" id="next">다음 단</button>
+      <button type="button" class="btn prev-btn" id="prev">${icon.undo}이전 단</button>
+    </div></div>`;
+
+  const save = async () => { part.updated = Date.now(); await db.put('parts', part); };
+  const snapshot = () => JSON.stringify(part.progress);
+  const restore = async (s) => { part.progress = JSON.parse(s); await save(); refresh(); };
+
+  // 다 뜬 단(안쪽)은 흐리게, 지금 단은 안팎 고리 사이를 옅게 칠하고 테두리에 노란 선
+  const decorate = (v) => {
+    const pr = p();
+    const [w, ht] = v.size();
+    const g = ringOnView(ring, v, sz.w, sz.h);
+    const cur = pr.done ? ring.n + 1 : pr.row;
+    const inner = stadium(g.Apx, g.Bpx, g.rpx(cur - 1));
+    let paths = '';
+    if (cur > 1) paths += `<path d="${inner}" class="rg-done"/>`;
+    if (!pr.done) {
+      const outer = stadium(g.Apx, g.Bpx, g.rpx(cur));
+      paths += `<path d="${outer} ${inner}" class="rg-now" fill-rule="evenodd"/>`;
+      paths += `<path d="${outer}" class="rg-line"/>`;
+      if (inner) paths += `<path d="${inner}" class="rg-line"/>`;
+    }
+    for (const m of memosOf(part)) {
+      if (m.row < 1 || m.row > ring.n) continue;
+      const [x, y] = [g.Bpx[0] + g.rpx(m.row - 0.5), g.Bpx[1]];
+      paths += `<g class="rg-memo"><circle cx="${x}" cy="${y}" r="10"/><text x="${x}" y="${y + 4}" text-anchor="middle">✎</text></g>`;
+    }
+    return `<svg class="ring-ov" width="${w}" height="${ht}">${paths}</svg>`;
+  };
+
+  const rowcard = app.querySelector('#rowcard');
+  const memoEl = app.querySelector('#memocard');
+  let memoShownFor = null;
+  const showMemo = (pr) => {
+    const h = memoCardHtml(part, pr);
+    memoEl.hidden = !h;
+    memoEl.innerHTML = h;
+    const key = h ? pr.row : null;
+    if (key !== null && key !== memoShownFor) { memoEl.classList.remove('pop'); void memoEl.offsetWidth; memoEl.classList.add('pop'); }
+    memoShownFor = key;
+  };
+  memoEl.addEventListener('click', async () => { if (await editMemo(part, p().row)) refresh(); });
+  const nextBtn = app.querySelector('#next');
+  // 지금 단의 고리가 보이도록 (오른쪽 끝 기준)
+  const follow = () => {
+    const pr = p();
+    const r = ringGeomPage(pr.done ? ring.n : pr.row);
+    cv.scrollTo(r.x, r.y, { x: 'center', yFrac: 0.5, smooth: true });
+  };
+  const ringGeomPage = (k) => {
+    // B 쪽 끝에서 바깥으로 r(k)만큼 떨어진 점 (페이지 0~1 좌표)
+    const ax = ring.a.x * sz.w, ay = ring.a.y * sz.h, bx = ring.b.x * sz.w, by = ring.b.y * sz.h;
+    let ux = bx - ax, uy = by - ay;
+    const L = Math.hypot(ux, uy) || 1;
+    ux /= L; uy /= L;
+    if (L < 1) { ux = 1; uy = 0; }
+    const dist = (q) => Math.hypot(q.x * sz.w - ax, q.y * sz.h - ay);
+    const p0 = (() => {
+      const vx = bx - ax, vy = by - ay, L2 = vx * vx + vy * vy;
+      const cx = ring.c.x * sz.w, cy = ring.c.y * sz.h;
+      const t = L2 ? clamp(((cx - ax) * vx + (cy - ay) * vy) / L2, 0, 1) : 0;
+      return Math.hypot(cx - (ax + t * vx), cy - (ay + t * vy)) / ring.n;
+    })();
+    void dist;
+    const r = ((ring.off || 0) + (k - 0.5) * (ring.gap || 1)) * p0;
+    return { x: (bx + ux * r) / sz.w, y: (by + uy * r) / sz.h };
+  };
+  const refresh = (scroll) => {
+    const pr = p();
+    const pct = Math.min(100, ((pr.done ? ring.n : pr.row - 1) / ring.n) * 100);
+    rowcard.innerHTML = `<span class="rc-top"><span>${pr.done ? '완료' : '지금 뜨는 단'}</span><span class="rc-jump">${icon.edit}이동·메모</span></span>
+      <span class="rc-num"><span class="num rc-big">${pr.row}</span><span class="rc-u">단</span><span class="num muted">/ ${ring.n}</span></span>
+      <span class="bar"><i style="width:${pct}%"></i></span>
+      <span class="rc-line small muted">${pr.done ? `${esc(part.name)} 완료` : pr.row > 1 ? `${pr.row - 1}단까지 떴습니다` : '첫 단을 뜨는 중'}</span>
+      ${memoHint(part, pr)}`;
+    showMemo(pr);
+    nextBtn.disabled = !!pr.done;
+    nextBtn.textContent = pr.done ? '완료' : '다음 단';
+    cv.redraw();
+    if (scroll) follow();
+  };
+
+  const key = `knit.circScale.${id}`;
+  let saved = 0;
+  try { saved = +localStorage.getItem(key) || 0; } catch {}
+  const cv = new ChartView(app.querySelector('#chart'), {
+    doc, pageNum: sg.page, area: sg.area, decorate,
+    onScale: (sc) => { try { localStorage.setItem(key, String(sc)); } catch {} },
+    onTap: () => toast('다른 단으로 가려면 그 단을 <b>길게</b> 누르세요'),
+    onLong: async (nx, ny) => {
+      const g = ringOnView(ring, { n2p: (x, y) => [x, y], size: () => [1, 1] }, sz.w, sz.h);
+      const r = g.roundAt(nx, ny);
+      if (r === p().row && !p().done) return;
+      const snap = snapshot();
+      jumpTo(part, r);
+      p().touched = true;
+      await save();
+      refresh(false);
+      toast(`<b>${r}단</b>으로 이동했습니다`, { action: '취소', onAction: () => restore(snap) });
+    },
+  });
+  window.__cv = cv;
+  onCleanup(() => { cv.destroy(); if (window.__cv === cv) window.__cv = null; });
+  await cv.init(saved || undefined);
+  refresh(false);
+
+  nextBtn.addEventListener('click', async () => {
+    const res = nextRow(part);
+    p().touched = true;
+    await save();
+    refresh(true);
+    if (res === 'finished' && nextPart) {
+      const yes = await dialog({
+        title: `<span class="ok">${icon.check}${esc(part.name)} 완료</span>`,
+        body: `마지막 단까지 떴습니다.<br>다음 파트 <span class="pill-hl">${esc(nextPart.name)}</span>${ro(nextPart.name)} 넘어갈까요?`,
+        buttons: [{ label: '아니오', value: false }, { label: '네', value: true, primary: true }],
+      });
+      if (yes) go(partHref(nextPart));
+    }
+  });
+  app.querySelector('#prev').addEventListener('click', async () => {
+    if (!prevRow(part)) { toast('첫 단입니다'); return; }
+    p().touched = true;
+    await save();
+    refresh(true);
+  });
+  rowcard.addEventListener('click', async () => {
+    const act = await rowMenu(part, p().row);
+    let r;
+    if (act === 'memo') { if (await editMemo(part, p().row)) refresh(); return; }
+    if (act === 'list') r = await memoList(part, true, p().row);
+    else if (act === 'jump') r = await keypad(R, p().row);
+    if (r === null || r === undefined) return;
+    const snap = snapshot();
+    jumpTo(part, r);
+    p().touched = true;
+    await save();
+    refresh(true);
+    toast(`<b>${r}단</b>으로 이동했습니다`, { action: '취소', onAction: () => restore(snap) });
+  });
+  app.querySelector('#sw').addEventListener('click', async () => {
+    const v = await sheet('파트 바꾸기', parts.map((x) => {
+      const st = partStatus(x);
+      return { label: x.name, value: x.id, current: x.id === id,
+        sub: st === 'done' ? '완료' : st === 'setup' ? '설정 필요' : st === 'active' ? `${x.progress.row}단` : '시작 전' };
+    }));
+    if (v && v !== id) go(partHref(parts.find((x) => x.id === v)));
+  });
+  app.querySelector('#docbtn').addEventListener('click', () => openDoc(doc));
+  app.querySelector('#legbtn').addEventListener('click', () => toggleLegend(proj, doc));
+  app.querySelector('#vidbtn').addEventListener('click', () => videoMenu(proj, doc));
+  let lock = null;
+  const keepAwake = async () => { try { lock = await navigator.wakeLock?.request('screen'); } catch {} };
+  keepAwake();
+  const vis = () => { if (document.visibilityState === 'visible') keepAwake(); };
+  document.addEventListener('visibilitychange', vis);
+  onCleanup(() => { document.removeEventListener('visibilitychange', vis); lock?.release?.().catch(() => {}); });
+}
+
 // ---------- 뜨기 화면 ----------
 async function viewKnit(id) {
   const part = await db.get('parts', id);
   if (!part) return go('#/');
   if (isText(part)) return viewTextKnit(part);
+  if (isCirc(part)) return viewCircKnit(part);
   if (!calibrated(part)) return location.replace(`#/cal/${id}/1`);
   const proj = await db.get('projects', part.projectId);
   const parts = await db.partsOf(proj.id);
