@@ -153,9 +153,10 @@ export function isRightSide(part, p = part.progress) {
   return (knitIndex(part, p) % 2 === 0) === (m.first !== 'WS');
 }
 
-export function repeatTotal(part) {
-  const r = part.cal.mode?.repeat;
-  return r === null || r === undefined || r === '' ? null : Number(r);
+// 차트 전체 반복 횟수. 반복 기능을 새로 설계하는 동안은 꺼 둔다 (항상 '반복 없음').
+// 예전에 적어 둔 값(part.cal.mode.repeat)은 지우지 않고 남겨 두어 새 기능으로 옮길 수 있게 한다.
+export function repeatTotal() {
+  return null;
 }
 
 // 다음 단. 결과: 'next' | 'repeat' | 'finished'
@@ -190,7 +191,7 @@ export function prevRow(part) {
     p.row -= 1;
     return true;
   }
-  if (p.rep > 1) {
+  if (repeatTotal(part) !== null && p.rep > 1) {
     p.rep -= 1;
     p.row = R.hi;
     return true;

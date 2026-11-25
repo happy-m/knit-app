@@ -394,20 +394,11 @@ export async function calMode(part, proj, top, save) {
       ${m.type === 'flat' ? `<div class="field"><span class="label">첫 단(${R.lo}단)은 어느 면인가요?</span>
         <div class="seg"><button type="button" data-first="RS" aria-pressed="${m.first !== 'WS'}">겉면</button><button type="button" data-first="WS" aria-pressed="${m.first === 'WS'}">안면</button></div></div>` : ''}
       <div class="field"><span class="label">이렇게 읽게 됩니다</span><div class="card flush">${preview()}</div></div>
-      <div class="field"><label for="rep" class="label">무늬 반복 (차트에 한 단위만 그려진 경우)</label>
-        <div class="suffix"><input id="rep" class="input num" inputmode="numeric" placeholder="반복 없음" value="${m.repeat ?? ''}"><span>회</span></div>
-        <span class="hint">이 차트를 위로 몇 번 반복하는지 적습니다. 넣으면 마지막 단 다음에 첫 단으로 돌아가고 회차가 올라갑니다. 횟수가 정해지지 않았으면 0을 넣고 직접 끝냅니다.</span></div>
     </div></div>
     <div class="footer"><button type="button" class="btn" id="list">저장하고 목록으로</button><button type="button" class="btn primary" id="start">완료하고 뜨기 시작</button></div>`;
     app.querySelectorAll('[data-type]').forEach((b) => b.addEventListener('click', () => { m.type = b.dataset.type; render(); }));
     app.querySelectorAll('[data-first]').forEach((b) => b.addEventListener('click', () => { m.first = b.dataset.first; render(); }));
-    app.querySelector('#rep').addEventListener('change', (e) => {
-      const v = e.target.value.replace(/\D/g, '');
-      m.repeat = v === '' ? null : parseInt(v, 10);
-    });
     const finish = async (dest) => {
-      const v = app.querySelector('#rep').value.replace(/\D/g, '');
-      m.repeat = v === '' ? null : parseInt(v, 10);
       part.cal.mode = { ...m };
       if (!part.progress) part.progress = startProgress(part);
       const R2 = rowsOf(part);
