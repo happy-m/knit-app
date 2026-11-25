@@ -13,7 +13,7 @@ import { validRing, ringOnView, stadium } from './circ.js';
 import { readSizeGroups, findSizeInfo } from './sizes.js';
 import { scanVideos, isYoutube, hostOf } from './videos.js';
 
-const APP_VERSION = '1.16.1';
+const APP_VERSION = '1.17.0';
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -2886,7 +2886,13 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 navigator.storage?.persist?.().catch(() => {});
 // iOS: 화면 전체가 핀치·더블탭으로 확대되지 않게 막는다 (차트는 자체 확대 사용)
 for (const t of ['gesturestart', 'gesturechange', 'dblclick']) document.addEventListener(t, (e) => e.preventDefault(), { passive: false });
-route();
+// 첫 화면(아이콘 + 이름)을 잠깐 보여 준 뒤 사라지게 한다
+const splashStart = performance.now();
+Promise.resolve(route()).catch(() => {}).finally(() => {
+  const el = document.getElementById('splash');
+  if (!el) return;
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 400); }, Math.max(0, 700 - (performance.now() - splashStart)));
+});
 navigator.storage?.persist?.().catch(() => {});
 // iOS: 화면 전체가 핀치·더블탭으로 확대되지 않게 막는다 (차트는 자체 확대 사용)
 for (const t of ['gesturestart', 'gesturechange', 'dblclick']) document.addEventListener(t, (e) => e.preventDefault(), { passive: false });

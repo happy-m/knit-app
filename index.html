@@ -11,10 +11,30 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="apple-touch-startup-image" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/1290x2796.png">
+<link rel="apple-touch-startup-image" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/1179x2556.png">
+<link rel="apple-touch-startup-image" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/1170x2532.png">
+<link rel="apple-touch-startup-image" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/1284x2778.png">
+<link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/1125x2436.png">
+<link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="icons/splash/828x1792.png">
+<link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/1242x2688.png">
+<link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="icons/splash/750x1334.png">
+<link rel="apple-touch-startup-image" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/1206x2622.png">
+<link rel="apple-touch-startup-image" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/1320x2868.png">
+<link rel="apple-touch-startup-image" media="(device-width: 360px) and (device-height: 780px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/1080x2340.png">
 <link rel="stylesheet" href="app.css">
+<style>
+/* 앱을 열 때 잠깐 보이는 첫 화면 (아이콘 + 이름) */
+#splash { position: fixed; inset: 0; z-index: 999; background: #FCF6EC; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding-bottom: 16vh; gap: 18px; transition: opacity .35s ease; font-family: -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; }
+#splash img { width: 96px; height: 96px; border-radius: 22px; box-shadow: 0 6px 20px rgba(28, 43, 42, .12); }
+#splash b { font-size: 22px; color: #1C2B2A; letter-spacing: -0.3px; }
+#splash.out { opacity: 0; pointer-events: none; }
+</style>
 <title>뜨개 도안</title>
 </head>
 <body>
+<div id="splash" aria-hidden="true"><img src="icons/icon-192.png" alt=""><b>뜨개 도안</b></div>
 <div id="app"></div>
 <div id="layer"></div>
 <script type="module" src="js/main.js"></script>
