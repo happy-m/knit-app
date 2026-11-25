@@ -135,15 +135,15 @@ export async function viewInfo(pid) {
       <label class="photo add">${icon.plus}<span>사진</span><input type="file" accept="image/*" multiple hidden data-addphoto="${where}"></label>
     </div>`;
   const yarnRow = (y, i) => `<div class="rep-row" data-i="${i}">
-      <input class="input" data-k="name" placeholder="실 이름 (예: 메리노 울)" value="${esc(y.name || '')}" autocomplete="off">
+      <input class="input" data-k="name" placeholder="실 이름 (예: 울 100%)" value="${esc(y.name || '')}" autocomplete="off">
       <div class="rep-two"><input class="input" data-k="color" placeholder="색·로트" value="${esc(y.color || '')}" autocomplete="off">
-      <input class="input" data-k="amount" placeholder="양 (예: 5볼)" value="${esc(y.amount || '')}" autocomplete="off"></div>
+      <input class="input" data-k="amount" placeholder="양 (예: 3볼)" value="${esc(y.amount || '')}" autocomplete="off"></div>
       <input class="input" data-k="note" placeholder="성분·굵기·구입처 (선택)" value="${esc(y.note || '')}" autocomplete="off">
       <button type="button" class="link-btn rm" data-rm="yarns">이 실 지우기</button></div>`;
   const needleRow = (n, i) => `<div class="rep-row" data-i="${i}"><div class="rep-two">
       <select class="input" data-k="kind">${NEEDLE_KINDS.map((k) => `<option${k === n.kind ? ' selected' : ''}>${k}</option>`).join('')}</select>
       <input class="input" data-k="mm" inputmode="decimal" placeholder="굵기 mm" value="${esc(n.mm || '')}" autocomplete="off"></div>
-      <input class="input" data-k="note" placeholder="용도 (예: 고무단, 몸판 · 80cm)" value="${esc(n.note || '')}" autocomplete="off">
+      <input class="input" data-k="note" placeholder="용도 (예: 고무단, 몸판)" value="${esc(n.note || '')}" autocomplete="off">
       <button type="button" class="link-btn rm" data-rm="needles">이 바늘 지우기</button></div>`;
   const memoRow = (m, i) => `<div class="rep-row" data-i="${i}">
       ${m.at ? `<span class="small muted">${stamp(m.at)}</span>` : ''}
@@ -288,7 +288,7 @@ export async function viewInfo(pid) {
       const url = await ask('영상 링크', '', { placeholder: 'https://youtu.be/…', label: '유튜브 공유 버튼에서 복사한 주소를 붙여넣으세요' });
       if (!url) return;
       if (!/^https?:\/\//i.test(url)) { toast('http로 시작하는 주소를 넣어주세요'); return; }
-      const title = await ask('영상 이름', '', { placeholder: '예: 감아코 영상' });
+      const title = await ask('영상 이름', '', { placeholder: '예: 코잡기 영상' });
       (proj.videos = proj.videos || []).push({ url, title: title || '', page: null, src: 'manual', renamed: !!title });
       await save();
       render();

@@ -265,7 +265,7 @@ export async function viewNew() {
       <div class="card file-card"><span class="file-ico">${icon.file}</span>
         <span class="file-t"><b>${esc(pending.fileName)}</b><span class="muted small">${pending.pages}쪽 · ${mb}MB · 폰 안에 저장됨</span></span></div>
       <div class="field"><label for="pname">작품 이름</label><input id="pname" class="input" value="${esc(pending.name)}" autocomplete="off" required></div>
-      <div class="field"><label for="psize">내가 뜰 사이즈 (선택)</label><input id="psize" class="input" autocomplete="off" placeholder="예: 1">
+      <div class="field"><label for="psize">내가 뜰 사이즈 (선택)</label><input id="psize" class="input" autocomplete="off" placeholder="예: M">
         <span class="hint">사이즈별로 차트가 따로 있는 도안이면 적어두세요. 화면에 계속 표시합니다.</span></div>
     </form></div>
     <div class="footer"><button class="btn primary" form="f">작품 만들고 파트 추가하기</button></div>`;

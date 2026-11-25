@@ -97,7 +97,7 @@ export async function sizeSheet(proj) {
         ${info.examples.length ? `<div class="label">미리보기</div><div class="sz-found sz-ex">${exHtml()}</div>` : ''}
         <label class="sz-tog"><span>다른 사이즈 숫자는 흐리게</span><input type="checkbox" id="szdim" ${dim ? 'checked' : ''}></label>`
       : '<p class="small muted">이 도안에서는 "36 (39) 43"처럼 사이즈별로 나열된 숫자를 찾지 못했어요. 사이즈 이름만 적어 둘 수 있습니다.</p>'}
-      <div class="field"><label for="szname">사이즈 이름 (선택)</label><input id="szname" class="input" autocomplete="off" placeholder="예: 슬림핏 S" value="${esc(proj.size || '')}"></div>
+      <div class="field"><label for="szname">사이즈 이름 (선택)</label><input id="szname" class="input" autocomplete="off" placeholder="예: M" value="${esc(proj.size || '')}"></div>
       <div class="dialog-btns">${cur.idx !== undefined ? '<button type="button" class="btn" data-off>강조 끄기</button>' : '<button type="button" class="btn" data-x>취소</button>'}<button type="button" class="btn primary" data-ok>저장</button></div>
     </div>`;
     const redraw = () => {

@@ -18,7 +18,7 @@ export function memoDialog(part, row) {
     el.innerHTML = `<form class="dialog" role="dialog" aria-modal="true">
       <div class="dialog-title">단 메모</div>
       <div class="memo-row"><input class="input num" id="memo-row" inputmode="numeric" value="${row}" aria-label="단 번호"><span>단에</span></div>
-      <textarea class="input area" id="memo-in" rows="4" placeholder="예: 여기서 목 라인 시작 · 양쪽 1코씩 줄임">${esc(orig?.text || '')}</textarea>
+      <textarea class="input area" id="memo-in" rows="4" placeholder="예: 여기서부터 코 줄이기">${esc(orig?.text || '')}</textarea>
       <div class="dialog-btns"><button type="button" class="btn danger" data-del ${orig ? '' : 'hidden'}>삭제</button><button type="button" class="btn" data-x>취소</button><button class="btn primary">저장</button></div></form>`;
     const rowIn = el.querySelector('#memo-row');
     const txt = el.querySelector('#memo-in');

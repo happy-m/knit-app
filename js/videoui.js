@@ -48,7 +48,7 @@ export async function videoMenu(proj, doc) {
     const url = await ask('영상 링크', '', { placeholder: 'https://youtu.be/…', label: '유튜브 공유 버튼에서 복사한 주소를 붙여넣으세요' });
     if (!url) return videoMenu(proj, doc);
     if (!/^https?:\/\//i.test(url)) { toast('http로 시작하는 주소를 넣어주세요'); return videoMenu(proj, doc); }
-    const title = await ask('영상 이름', '', { placeholder: '예: 감아코 영상' });
+    const title = await ask('영상 이름', '', { placeholder: '예: 코잡기 영상' });
     (proj.videos = proj.videos || []).push({ url, title: title || '', page: null, src: 'manual', renamed: !!title });
     await db.put('projects', proj);
     return videoMenu(proj, doc);
