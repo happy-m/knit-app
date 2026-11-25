@@ -13,7 +13,7 @@ import { validRing, ringOnView, stadium } from './circ.js';
 import { readSizeGroups, findSizeInfo } from './sizes.js';
 import { scanVideos, isYoutube, hostOf } from './videos.js';
 
-const APP_VERSION = '1.16.0';
+const APP_VERSION = '1.16.1';
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -157,8 +157,8 @@ async function viewHome() {
       <label class="btn primary small">${icon.plus}새 작품<input type="file" accept="application/pdf,.pdf" hidden></label></div>
     <div class="page"><div class="wrap">
       ${cards.join('')}
-      <label class="empty-card"><input type="file" accept="application/pdf,.pdf" hidden>
-        <b>${icon.plus}도안 PDF로 새 작품</b></label>
+      ${projects.length ? '' : `<label class="empty-card"><input type="file" accept="application/pdf,.pdf" hidden>
+        <b>${icon.plus}도안 PDF로 새 작품</b><span>파일 앱에서 도안 PDF를 고르면 시작해요</span></label>`}
       <div class="card backup-card">
         <div class="label">백업</div>
         <p class="small muted">도안과 기록은 이 앱 안에만 저장돼서, 홈 화면 아이콘을 지우면 함께 지워집니다. 백업 파일을 '파일' 앱이나 iCloud Drive에 저장해 두면 다시 설치한 뒤 되살릴 수 있어요.</p>
