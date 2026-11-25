@@ -13,7 +13,7 @@ import { validRing, ringOnView, stadium } from './circ.js';
 import { readSizeGroups, findSizeInfo } from './sizes.js';
 import { scanVideos, isYoutube, hostOf } from './videos.js';
 
-const APP_VERSION = '1.20.1';
+const APP_VERSION = '1.21.0';
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -612,7 +612,7 @@ function photoViewer(url) {
   });
 }
 
-const INFO_TABS = [['yarn', '실'], ['needle', '바늘'], ['gauge', '게이지'], ['memo', '메모'], ['date', '기간']];
+const INFO_TABS = [['yarn', '실'], ['needle', '바늘'], ['gauge', '게이지'], ['memo', '메모'], ['video', '영상'], ['date', '기간']];
 let infoTab = 'yarn';
 
 async function viewInfo(pid) {
@@ -679,6 +679,16 @@ async function viewInfo(pid) {
         ${ds || dr ? `<span class="small muted">세탁 전보다 ${[ds && `코 ${ds}`, dr && `단 ${dr}`].filter(Boolean).join(' · ')}</span>` : ''}
         ${photosHtml(A.photos, 'gauge2')}</div>`;
     }
+    if (infoTab === 'video') {
+      const vs = proj.videos || [];
+      return `<p class="hint">뜨기 화면의 '영상' 버튼과 같은 목록입니다. 누르면 유튜브(또는 그 링크)로 열립니다.</p>
+      ${vs.map((x, i) => `<div class="vid-row"><button type="button" class="vid-open" data-vopen="${i}">
+          <b>${esc(videoTitle(x))}</b><span class="small muted">${esc(`${isYoutube(x.url) ? '▶ 유튜브' : /영상|동영상|video/i.test(x.title || '') ? '▶ 영상' : '🔗 링크'}${x.page ? ` · ${x.page}쪽 ${x.src === 'qr' ? 'QR' : '링크'}` : ' · 직접 추가'} · ${hostOf(x.url)}`)}</span></button>
+          <button type="button" class="icon-btn" data-vmore="${i}" aria-label="이름 바꾸기·빼기">${icon.more || '⋯'}</button></div>`).join('')
+        || `<p class="hint center">${proj.videosScanned ? '도안에서 찾은 영상이 없습니다.' : '아직 영상이 없습니다.'}</p>`}
+      <button type="button" class="btn dashed" data-vadd>${icon.plus}링크 직접 추가</button>
+      <button type="button" class="btn" data-vscan>${proj.videosScanned ? '도안에서 다시 찾기' : '도안의 QR 코드·링크에서 찾기'}</button>`;
+    }
     if (infoTab === 'memo') return `<button type="button" class="btn dashed" data-add="memos">${icon.plus}새 메모</button>
       <div id="memos">${info.memos.map(memoRow).join('') || '<p class="hint center">아직 메모가 없습니다.</p>'}</div>`;
     return `<div class="rep-two">
@@ -687,7 +697,7 @@ async function viewInfo(pid) {
       </div>
       <p class="hint">완성한 날을 비워 두면 '뜨는 중'으로 보입니다.</p>`;
   };
-  const count = (k) => ({ yarn: info.yarns.length, needle: info.needles.length, memo: info.memos.length,
+  const count = (k) => ({ video: (proj.videos || []).length, yarn: info.yarns.length, needle: info.needles.length, memo: info.memos.length,
     gauge: info.gauge.sts || info.gauge.rows || info.gauge.photos.length || info.gauge.after.sts || info.gauge.after.rows || info.gauge.after.photos.length ? '✓' : 0, date: info.start ? '✓' : 0 }[k]);
   const render = () => {
     app.innerHTML = `${header(`#/p/${pid}`, '작품 정보', esc(proj.name))}
@@ -719,6 +729,8 @@ async function viewInfo(pid) {
     collect();
     const fresh = await db.get('projects', pid);
     if (!fresh) return;
+    fresh.videos = proj.videos;
+    fresh.videosScanned = proj.videosScanned;
     fresh.info = info;
     fresh.updated = Date.now();
     await db.put('projects', fresh);
@@ -758,6 +770,37 @@ async function viewInfo(pid) {
       await save();
       render();
     }));
+    f.querySelectorAll('[data-vopen]').forEach((b) => b.addEventListener('click', () => window.open(proj.videos[+b.dataset.vopen].url, '_blank', 'noopener')));
+    f.querySelectorAll('[data-vmore]').forEach((b) => b.addEventListener('click', async () => {
+      const x = proj.videos[+b.dataset.vmore];
+      const a = await sheet(videoTitle(x), [{ label: '이름 바꾸기', value: 'rename' }, { label: '목록에서 빼기', value: 'rm', danger: true }]);
+      if (a === 'rename') {
+        const n = await ask('영상 이름', x.title || '');
+        if (!n) return;
+        x.title = n;
+        x.renamed = true;
+      } else if (a === 'rm') proj.videos.splice(+b.dataset.vmore, 1);
+      else return;
+      await save();
+      render();
+    }));
+    f.querySelector('[data-vadd]')?.addEventListener('click', async () => {
+      const url = await ask('영상 링크', '', { placeholder: 'https://youtu.be/…', label: '유튜브 공유 버튼에서 복사한 주소를 붙여넣으세요' });
+      if (!url) return;
+      if (!/^https?:\/\//i.test(url)) { toast('http로 시작하는 주소를 넣어주세요'); return; }
+      const title = await ask('영상 이름', '', { placeholder: '예: 감아코 영상' });
+      (proj.videos = proj.videos || []).push({ url, title: title || '', page: null, src: 'manual', renamed: !!title });
+      await save();
+      render();
+    });
+    f.querySelector('[data-vscan]')?.addEventListener('click', async () => {
+      await save();
+      const fresh = await db.get('projects', pid);
+      await runVideoScan(fresh, await loadPdf(fresh.fileId));
+      proj.videos = fresh.videos;
+      proj.videosScanned = fresh.videosScanned;
+      render();
+    });
     f.querySelectorAll('[data-addphoto]').forEach((inp) => inp.addEventListener('change', async () => {
       const files = [...inp.files];
       inp.value = '';

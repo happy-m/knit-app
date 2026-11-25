@@ -414,3 +414,9 @@ textarea.input.area { padding: 12px; min-height: 120px; line-height: 1.5; resize
 .photo-view .icon-btn { color: #fff; }
 .photo-view .pz { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: auto; touch-action: pinch-zoom; }
 .photo-view .pz img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.tabs { overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs button { flex: 1 0 auto; padding: 0 10px; }
+.vid-row { display: flex; align-items: center; gap: 4px; background: var(--white); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 8px; padding-right: 4px; }
+.vid-open { flex: 1; min-width: 0; text-align: left; border: 0; background: none; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; color: var(--ink); font-size: 15px; }
+.vid-open b, .vid-open span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
