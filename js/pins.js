@@ -7,12 +7,12 @@ const stamp = (at) => { const d = new Date(at); return `${d.getMonth() + 1}.${d.
 // 단 카드 메뉴에 넣는 항목
 export function pinMenuItems(part) {
   const pins = part.pins || {};
-  return Object.entries(KINDS).flatMap(([k, what]) => {
+  return Object.entries(KINDS).flatMap(([k, name]) => {
     const pin = pins[k];
-    if (!pin) return [{ label: `${k} 핀 꽂기 (${what})`, value: `pin${k}` }];
+    if (!pin) return [{ label: `${name} 핀 꽂기`, value: `pin${k}` }];
     return [
-      { label: `${k} 핀 옮기기 (${what})`, sub: `${pin.label ? `${pin.label} · ` : ''}${stamp(pin.at)}에 꽂음`, value: `pin${k}` },
-      { label: `${k} 핀 빼기`, value: `unpin${k}`, danger: true },
+      { label: `${name} 핀 옮기기`, sub: `${pin.label ? `${pin.label} · ` : ''}${stamp(pin.at)}에 꽂음`, value: `pin${k}` },
+      { label: `${name} 핀 빼기`, value: `unpin${k}`, danger: true },
     ];
   });
 }
@@ -30,10 +30,10 @@ export function pinControl(part, save, redraw) {
         delete part.pins?.[m[2]];
         await save();
         redraw();
-        toast(`${m[2]} 핀을 뺐습니다`);
+        toast(`${KINDS[m[2]]} 핀을 뺐습니다`);
       } else {
         arming = m[2];
-        toast(`<b>${m[2]} 핀</b>을 꽂을 자리를 도안에서 탭하세요`, { ms: 5000 });
+        toast(`<b>${KINDS[m[2]]} 핀</b>을 꽂을 자리를 도안에서 탭하세요`, { ms: 5000 });
       }
       return true;
     },
@@ -44,7 +44,7 @@ export function pinControl(part, save, redraw) {
       (part.pins ||= {})[k] = { ...pos, at: Date.now() };
       await save();
       redraw();
-      toast(`<b>${k} 핀</b>을 꽂았습니다${pos.label ? ` · ${pos.label}` : ''}`);
+      toast(`<b>${KINDS[k]} 핀</b>을 꽂았습니다${pos.label ? ` · ${pos.label}` : ''}`);
     },
     // 구간 seg에 있는 핀을 그린다. n2p: 페이지 좌표 → 화면 px
     html(seg, n2p) {

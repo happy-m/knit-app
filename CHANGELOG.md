@@ -7,6 +7,9 @@
 
 올릴 때는 `python3 scripts/bump.py patch|minor|major "바뀐 점"`을 실행하고, 커밋 뒤 `vX.Y.Z` 태그를 단다.
 
+## 1.23.2 — 2026-11-25
+- 핀 메뉴 문구: Start·End·Marker 1·2 핀 꽂기/옮기기/빼기
+
 ## 1.23.1 — 2026-11-25
 - 단 카드 메뉴 문구: 핀 설명을 Start·End·Marker 1·2로, '메모 입력'으로
 
