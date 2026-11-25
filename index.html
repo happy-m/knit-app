@@ -35,6 +35,15 @@
 </head>
 <body>
 <div id="splash" aria-hidden="true"><img src="icons/icon-192.png" alt=""><b>뜨개 도안</b></div>
+<script>
+// 시작 화면은 한동안 안 쓰다가 켤 때만 보여 준다. 방금까지 쓰던 앱을 다시 열 때는 바로 걷는다.
+(function () {
+  var last = 0;
+  try { last = +localStorage.getItem('knit.lastActive') || 0; } catch (e) {}
+  window.__splashLong = Date.now() - last > 5 * 60 * 1000;
+  if (!window.__splashLong) document.getElementById('splash').remove();
+})();
+</script>
 <div id="app"></div>
 <div id="layer"></div>
 <script type="module" src="js/main.js"></script>
