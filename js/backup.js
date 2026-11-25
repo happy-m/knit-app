@@ -16,6 +16,17 @@ export async function buildBackup() {
     files.push({ id: p.fileId, size: buf.byteLength });
     bufs.push(buf);
   }
+  // 작품 정보에 붙인 사진(게이지·메모)
+  for (const p of projects) {
+    const i = p.info || {};
+    for (const id of [...(i.gauge?.photos || []), ...(i.memos || []).flatMap((m) => m.photos || [])]) {
+      if (files.some((f) => f.id === id)) continue;
+      const buf = await db.get('files', id);
+      if (!buf) continue;
+      files.push({ id, size: buf.byteLength });
+      bufs.push(buf);
+    }
+  }
   const meta = { app: 'knit', v: 1, created: Date.now(), projects, parts, files };
   const json = new TextEncoder().encode(JSON.stringify(meta));
   const head = new Uint8Array(12);

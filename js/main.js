@@ -13,7 +13,7 @@ import { validRing, ringOnView, stadium } from './circ.js';
 import { readSizeGroups, findSizeInfo } from './sizes.js';
 import { scanVideos, isYoutube, hostOf } from './videos.js';
 
-const APP_VERSION = '1.18.1';
+const APP_VERSION = '1.19.0';
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -199,6 +199,7 @@ async function viewHome() {
 
 // 작품 하나를 지운다 (파트·도안 PDF·기록 모두)
 async function removeProject(proj) {
+  for (const id of photoIdsOf(proj)) await db.del('files', id);
   for (const x of await db.partsOf(proj.id)) await db.del('parts', x.id);
   const others = (await db.all('projects')).filter((x) => x.id !== proj.id && x.fileId === proj.fileId);
   if (!others.length) {
@@ -517,15 +518,21 @@ function fmtDate(d) {
 
 function infoLines(info) {
   if (!info) return [];
+  info = normInfo(info);
   const out = [];
   const yarns = (info.yarns || []).filter((y) => y.name || y.color || y.amount);
   if (yarns.length) out.push(['실', yarns.map((y) => [y.name, y.color, y.amount].filter(Boolean).map(esc).join(' · ')).join('<br>')]);
   const needles = (info.needles || []).filter((n) => n.mm || n.note);
   if (needles.length) out.push(['바늘', needles.map((n) => [n.kind, n.mm ? `${n.mm}mm` : '', n.note].filter(Boolean).map(esc).join(' · ')).join('<br>')]);
   const g = info.gauge || {};
-  if (g.sts || g.rows) out.push(['게이지', `${esc(g.sts || '?')}코 × ${esc(g.rows || '?')}단 <span class="muted">(10cm)</span>${g.note ? ` · ${esc(g.note)}` : ''}`]);
+  if (g.sts || g.rows) out.push(['게이지', `${esc(g.sts || '?')}코 × ${esc(g.rows || '?')}단 <span class="muted">(10cm)</span>${g.note ? ` · ${esc(g.note)}` : ''}${g.photos.length ? ` · 사진 ${g.photos.length}` : ''}`]);
+  else if (g.photos.length) out.push(['게이지', `사진 ${g.photos.length}장`]);
   if (info.start || info.end) out.push(['기간', `${fmtDate(info.start) || '?'} ~ ${fmtDate(info.end) || '뜨는 중'}`]);
-  if (info.memo) out.push(['메모', esc(info.memo).replace(/\n/g, '<br>')]);
+  const memos = info.memos.filter((m) => m.text || m.photos?.length);
+  if (memos.length) {
+    const first = memos[0].text ? esc(memos[0].text.split('\n')[0].slice(0, 40)) : '사진 메모';
+    out.push(['메모', `${first}${memos.length > 1 ? ` <span class="muted">외 ${memos.length - 1}개</span>` : ''}`]);
+  }
   return out;
 }
 
@@ -539,93 +546,214 @@ function infoCard(proj) {
     <dl class="info-dl">${lines.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl></a>`;
 }
 
+// 예전 형식(메모 한 덩어리)을 새 형식(메모 여러 개)으로 읽는다
+function normInfo(info = {}) {
+  info.yarns = info.yarns || [];
+  info.needles = info.needles || [];
+  info.gauge = info.gauge || {};
+  info.gauge.photos = info.gauge.photos || [];
+  if (!Array.isArray(info.memos)) info.memos = info.memo ? [{ id: db.uid(), text: info.memo, at: null, photos: [] }] : [];
+  delete info.memo;
+  return info;
+}
+// 작품에 붙은 사진 id 전부
+function photoIdsOf(proj) {
+  const i = proj.info || {};
+  return [...(i.gauge?.photos || []), ...(i.memos || []).flatMap((m) => m.photos || [])];
+}
+
+// 사진을 긴 변 1600px 이하 JPEG로 줄여 저장하고 id를 돌려준다
+async function savePhoto(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * k);
+    c.height = Math.round(img.naturalHeight * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    const blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.82));
+    const id = `img_${db.uid()}`;
+    await db.put('files', await blob.arrayBuffer(), id);
+    return id;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+async function photoUrl(id) {
+  const buf = await db.get('files', id);
+  return buf ? URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' })) : null;
+}
+// 사진 크게 보기. 지우기를 고르면 'del'
+function photoViewer(url) {
+  return new Promise((resolve) => {
+    const el = document.createElement('div');
+    el.className = 'docv photo-view';
+    el.innerHTML = `<div class="docv-top"><span class="k-spacer"></span>
+        <button type="button" class="btn danger" data-del>사진 지우기</button>
+        <button type="button" class="icon-btn" data-x aria-label="닫기">${icon.close}</button></div>
+      <div class="pz"><img src="${url}" alt=""></div>`;
+    const done = (v) => { el.remove(); resolve(v); };
+    el.querySelector('[data-x]').addEventListener('click', () => done(null));
+    el.querySelector('[data-del]').addEventListener('click', () => done('del'));
+    document.getElementById('layer').appendChild(el);
+  });
+}
+
+const INFO_TABS = [['yarn', '실'], ['needle', '바늘'], ['gauge', '게이지'], ['memo', '메모'], ['date', '기간']];
+let infoTab = 'yarn';
+
 async function viewInfo(pid) {
   const proj = await db.get('projects', pid);
   if (!proj) return go('#/');
-  const info = proj.info || {};
-  info.yarns = info.yarns?.length ? info.yarns : [{}];
-  info.needles = info.needles?.length ? info.needles : [{ kind: '줄바늘' }];
-  info.gauge = info.gauge || {};
+  const info = normInfo(proj.info);
+  const urls = new Map(); // 사진 id → object URL
+  cleanups.push(() => urls.forEach((u) => URL.revokeObjectURL(u)));
+  const urlOf = async (id) => {
+    if (!urls.has(id)) urls.set(id, await photoUrl(id));
+    return urls.get(id);
+  };
+  const stamp = (at) => {
+    if (!at) return '';
+    const d = new Date(at);
+    return `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}`;
+  };
+  const photosHtml = (ids, where) => `<div class="photos" data-where="${where}">
+      ${ids.map((id) => `<button type="button" class="photo" data-photo="${id}"><img alt="첨부 사진" data-src="${id}"></button>`).join('')}
+      <label class="photo add">${icon.plus}<span>사진</span><input type="file" accept="image/*" multiple hidden data-addphoto="${where}"></label>
+    </div>`;
   const yarnRow = (y, i) => `<div class="rep-row" data-i="${i}">
       <input class="input" data-k="name" placeholder="실 이름 (예: 메리노 울)" value="${esc(y.name || '')}" autocomplete="off">
       <div class="rep-two"><input class="input" data-k="color" placeholder="색·로트" value="${esc(y.color || '')}" autocomplete="off">
       <input class="input" data-k="amount" placeholder="양 (예: 5볼)" value="${esc(y.amount || '')}" autocomplete="off"></div>
-      ${i > 0 ? `<button type="button" class="link-btn rm" data-rm="yarns">이 실 지우기</button>` : ''}</div>`;
+      <input class="input" data-k="note" placeholder="성분·굵기·구입처 (선택)" value="${esc(y.note || '')}" autocomplete="off">
+      <button type="button" class="link-btn rm" data-rm="yarns">이 실 지우기</button></div>`;
   const needleRow = (n, i) => `<div class="rep-row" data-i="${i}"><div class="rep-two">
       <select class="input" data-k="kind">${NEEDLE_KINDS.map((k) => `<option${k === n.kind ? ' selected' : ''}>${k}</option>`).join('')}</select>
       <input class="input" data-k="mm" inputmode="decimal" placeholder="굵기 mm" value="${esc(n.mm || '')}" autocomplete="off"></div>
       <input class="input" data-k="note" placeholder="용도 (예: 고무단, 몸판 · 80cm)" value="${esc(n.note || '')}" autocomplete="off">
-      ${i > 0 ? `<button type="button" class="link-btn rm" data-rm="needles">이 바늘 지우기</button>` : ''}</div>`;
-  const render = () => {
-    app.innerHTML = `${header(`#/p/${pid}`, '작품 정보', esc(proj.name))}
-    <div class="page"><form class="wrap" id="f">
-      <div class="label">실</div>
-      <div id="yarns">${info.yarns.map(yarnRow).join('')}</div>
-      <button type="button" class="btn dashed" data-add="yarns">${icon.plus}실 추가</button>
-      <div class="label">바늘</div>
-      <div id="needles">${info.needles.map(needleRow).join('')}</div>
-      <button type="button" class="btn dashed" data-add="needles">${icon.plus}바늘 추가</button>
-      <div class="label">게이지 <span class="muted small">(10cm × 10cm)</span></div>
+      <button type="button" class="link-btn rm" data-rm="needles">이 바늘 지우기</button></div>`;
+  const memoRow = (m, i) => `<div class="rep-row" data-i="${i}">
+      ${m.at ? `<span class="small muted">${stamp(m.at)}</span>` : ''}
+      <textarea class="input area" data-k="text" rows="3" placeholder="수정한 점, 실 남은 양, 다음에 참고할 것…">${esc(m.text || '')}</textarea>
+      ${photosHtml(m.photos || [], `memo:${i}`)}
+      <button type="button" class="link-btn rm" data-rm="memos">이 메모 지우기</button></div>`;
+  const body = () => {
+    if (infoTab === 'yarn') return `<div id="yarns">${info.yarns.map(yarnRow).join('') || '<p class="hint center">아직 적은 실이 없습니다.</p>'}</div>
+      <button type="button" class="btn dashed" data-add="yarns">${icon.plus}실 추가</button>`;
+    if (infoTab === 'needle') return `<div id="needles">${info.needles.map(needleRow).join('') || '<p class="hint center">아직 적은 바늘이 없습니다.</p>'}</div>
+      <button type="button" class="btn dashed" data-add="needles">${icon.plus}바늘 추가</button>`;
+    if (infoTab === 'gauge') return `<div class="label">10cm × 10cm 안에</div>
       <div class="rep-two">
         <div class="field"><label for="g-sts">코</label><input id="g-sts" class="input" inputmode="decimal" value="${esc(info.gauge.sts || '')}"></div>
         <div class="field"><label for="g-rows">단</label><input id="g-rows" class="input" inputmode="decimal" value="${esc(info.gauge.rows || '')}"></div>
       </div>
       <input id="g-note" class="input" placeholder="무늬·바늘 (예: 메리야스, 4mm)" value="${esc(info.gauge.note || '')}" autocomplete="off">
-      <div class="label">기간</div>
-      <div class="rep-two">
+      <div class="label">스와치 사진</div>
+      ${photosHtml(info.gauge.photos, 'gauge')}`;
+    if (infoTab === 'memo') return `<button type="button" class="btn dashed" data-add="memos">${icon.plus}새 메모</button>
+      <div id="memos">${info.memos.map(memoRow).join('') || '<p class="hint center">아직 메모가 없습니다.</p>'}</div>`;
+    return `<div class="rep-two">
         <div class="field"><label for="d-start">시작한 날</label><input id="d-start" class="input" type="date" value="${esc(info.start || '')}"></div>
         <div class="field"><label for="d-end">완성한 날</label><input id="d-end" class="input" type="date" value="${esc(info.end || '')}"></div>
       </div>
-      <div class="label">메모</div>
-      <textarea id="memo" class="input area" rows="5" placeholder="수정한 점, 실 남은 양, 다음에 참고할 것…">${esc(info.memo || '')}</textarea>
+      <p class="hint">완성한 날을 비워 두면 '뜨는 중'으로 보입니다.</p>`;
+  };
+  const count = (k) => ({ yarn: info.yarns.length, needle: info.needles.length, memo: info.memos.length,
+    gauge: info.gauge.sts || info.gauge.rows || info.gauge.photos.length ? '✓' : 0, date: info.start ? '✓' : 0 }[k]);
+  const render = () => {
+    app.innerHTML = `${header(`#/p/${pid}`, '작품 정보', esc(proj.name))}
+    <div class="tabs" role="tablist">${INFO_TABS.map(([k, l]) =>
+      `<button type="button" role="tab" data-tab="${k}" aria-selected="${k === infoTab}">${l}${count(k) ? `<i>${count(k)}</i>` : ''}</button>`).join('')}</div>
+    <div class="page"><form class="wrap" id="f">${body()}
       <p class="hint center">적는 대로 바로 저장됩니다.</p>
     </form></div>`;
     bind();
+    app.querySelectorAll('img[data-src]').forEach(async (im) => { const u = await urlOf(im.dataset.src); if (u) im.src = u; });
   };
+  const listOf = (where) => (where === 'gauge' ? info.gauge.photos : (info.memos[+where.split(':')[1]].photos ||= []));
   const collect = () => {
-    for (const key of ['yarns', 'needles']) {
+    for (const key of ['yarns', 'needles', 'memos']) {
       app.querySelectorAll(`#${key} .rep-row`).forEach((row) => {
         const o = info[key][+row.dataset.i];
         row.querySelectorAll('[data-k]').forEach((el) => { o[el.dataset.k] = el.value.trim(); });
       });
     }
-    const v = (id) => app.querySelector(id).value.trim();
-    info.gauge = { sts: v('#g-sts'), rows: v('#g-rows'), note: v('#g-note') };
-    info.start = v('#d-start');
-    info.end = v('#d-end');
-    info.memo = app.querySelector('#memo').value.replace(/\s+$/, '');
+    const v = (id) => app.querySelector(id)?.value.trim();
+    if (app.querySelector('#g-sts')) Object.assign(info.gauge, { sts: v('#g-sts'), rows: v('#g-rows'), note: v('#g-note') });
+    if (app.querySelector('#d-start')) { info.start = v('#d-start'); info.end = v('#d-end'); }
   };
   let t;
   const save = async () => {
     collect();
-    const clean = {
-      ...info,
-      yarns: info.yarns.filter((y) => y.name || y.color || y.amount),
-      needles: info.needles.filter((n) => n.mm || n.note),
-    };
     const fresh = await db.get('projects', pid);
-    fresh.info = clean;
+    if (!fresh) return;
+    fresh.info = info;
     fresh.updated = Date.now();
     await db.put('projects', fresh);
   };
   const bind = () => {
     const f = app.querySelector('#f');
     f.addEventListener('submit', (e) => e.preventDefault());
-    f.addEventListener('input', () => { clearTimeout(t); t = setTimeout(save, 400); });
-    f.addEventListener('change', save);
+    f.addEventListener('input', (e) => { if (e.target.type === 'file') return; clearTimeout(t); t = setTimeout(save, 400); });
+    f.addEventListener('change', (e) => { if (e.target.type !== 'file') save(); });
+    app.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', async () => {
+      await save();
+      infoTab = b.dataset.tab;
+      render();
+    }));
     f.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', async () => {
       collect();
       const key = b.dataset.add;
-      const last = info[key][info[key].length - 1] || {};
-      info[key].push(key === 'needles' ? { kind: last.kind || '줄바늘' } : {});
+      if (key === 'memos') info.memos.unshift({ id: db.uid(), text: '', at: Date.now(), photos: [] });
+      else info[key].push(key === 'needles' ? { kind: info.needles.at(-1)?.kind || '줄바늘' } : {});
       await save();
       render();
       const rows = app.querySelectorAll(`#${key} .rep-row`);
-      rows[rows.length - 1].querySelector('input')?.focus();
+      (key === 'memos' ? rows[0] : rows[rows.length - 1])?.querySelector('input, textarea')?.focus();
     }));
     f.querySelectorAll('[data-rm]').forEach((b) => b.addEventListener('click', async () => {
       collect();
-      info[b.dataset.rm].splice(+b.closest('.rep-row').dataset.i, 1);
+      const key = b.dataset.rm;
+      const i = +b.closest('.rep-row').dataset.i;
+      const item = info[key][i];
+      if (key === 'memos' && (item.text || item.photos?.length)) {
+        const ok = await dialog({ title: '메모 지우기', body: '이 메모와 첨부한 사진을 지웁니다.',
+          buttons: [{ label: '취소', value: false }, { label: '지우기', value: true, danger: true }] });
+        if (!ok) return;
+      }
+      for (const id of item.photos || []) await db.del('files', id);
+      info[key].splice(i, 1);
+      await save();
+      render();
+    }));
+    f.querySelectorAll('[data-addphoto]').forEach((inp) => inp.addEventListener('change', async () => {
+      const files = [...inp.files];
+      inp.value = '';
+      if (!files.length) return;
+      collect();
+      const list = listOf(inp.dataset.addphoto);
+      const wait = toast('사진을 저장하는 중…', { ms: 60000 });
+      let fail = 0;
+      for (const file of files) {
+        try { list.push(await savePhoto(file)); } catch { fail++; }
+      }
+      wait.remove();
+      if (fail) toast(`사진 ${fail}장은 열 수 없어 넣지 못했습니다`);
+      await save();
+      render();
+    }));
+    f.querySelectorAll('[data-photo]').forEach((b) => b.addEventListener('click', async () => {
+      const id = b.dataset.photo;
+      const u = await urlOf(id);
+      if (!u) return;
+      if ((await photoViewer(u)) !== 'del') return;
+      collect();
+      const list = listOf(b.closest('.photos').dataset.where);
+      list.splice(list.indexOf(id), 1);
+      await db.del('files', id);
       await save();
       render();
     }));

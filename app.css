@@ -398,3 +398,19 @@ textarea.input.area { padding: 12px; min-height: 120px; line-height: 1.5; resize
 .sw-del { position: absolute; top: 0; right: 0; bottom: 0; width: 96px; border: 0; border-radius: 0 16px 16px 0; background: var(--mark); color: #fff;
   font-size: 16px; font-weight: 700; padding-left: 8px; visibility: hidden; }
 .swipe.open .sw-del, .swipe:has(.sw-row[style*="translateX"]) .sw-del { visibility: visible; }
+/* 작품 정보 탭 */
+.tabs { display: flex; border-bottom: 1px solid var(--line); padding: 0 12px; flex: none; }
+.tabs button { flex: 1; min-height: 46px; border: 0; background: none; font-size: 15px; font-weight: 600; color: var(--sub);
+  border-bottom: 3px solid transparent; margin-bottom: -1px; display: flex; align-items: center; justify-content: center; gap: 4px; white-space: nowrap; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--btn); }
+.tabs i { font-style: normal; font-size: 11px; font-weight: 700; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+  background: #EFE8E2; color: var(--btn); display: grid; place-items: center; }
+.photos { display: flex; flex-wrap: wrap; gap: 8px; }
+.photo { width: 76px; height: 76px; border-radius: 10px; border: 1px solid var(--line); background: var(--ground); padding: 0; overflow: hidden; }
+.photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo.add { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-style: dashed; color: var(--sub); font-size: 12px; cursor: pointer; }
+.photo-view { background: #111; }
+.photo-view .docv-top { background: transparent; }
+.photo-view .icon-btn { color: #fff; }
+.photo-view .pz { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: auto; touch-action: pinch-zoom; }
+.photo-view .pz img { max-width: 100%; max-height: 100%; object-fit: contain; }
