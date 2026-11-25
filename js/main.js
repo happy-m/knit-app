@@ -13,7 +13,7 @@ import { validRing, ringOnView, stadium } from './circ.js';
 import { readSizeGroups, findSizeInfo } from './sizes.js';
 import { scanVideos, isYoutube, hostOf } from './videos.js';
 
-const APP_VERSION = '1.19.0';
+const APP_VERSION = '1.20.0';
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -525,8 +525,16 @@ function infoLines(info) {
   const needles = (info.needles || []).filter((n) => n.mm || n.note);
   if (needles.length) out.push(['바늘', needles.map((n) => [n.kind, n.mm ? `${n.mm}mm` : '', n.note].filter(Boolean).map(esc).join(' · ')).join('<br>')]);
   const g = info.gauge || {};
-  if (g.sts || g.rows) out.push(['게이지', `${esc(g.sts || '?')}코 × ${esc(g.rows || '?')}단 <span class="muted">(10cm)</span>${g.note ? ` · ${esc(g.note)}` : ''}${g.photos.length ? ` · 사진 ${g.photos.length}` : ''}`]);
-  else if (g.photos.length) out.push(['게이지', `사진 ${g.photos.length}장`]);
+  const gl = [];
+  const gOne = (x, tag) => {
+    const ph = x.photos?.length ? ` · 사진 ${x.photos.length}` : '';
+    if (x.sts || x.rows) gl.push(`${tag}${esc(x.sts || '?')}코 × ${esc(x.rows || '?')}단${ph}`);
+    else if (ph) gl.push(`${tag}사진 ${x.photos.length}장`);
+  };
+  const both = g.after.sts || g.after.rows || g.after.photos.length;
+  gOne(g, both ? '<span class="muted">세탁 전</span> ' : '');
+  gOne(g.after, '<span class="muted">세탁 후</span> ');
+  if (gl.length) out.push(['게이지', gl.join('<br>') + (g.note ? `<br><span class="muted">${esc(g.note)}</span>` : '')]);
   if (info.start || info.end) out.push(['기간', `${fmtDate(info.start) || '?'} ~ ${fmtDate(info.end) || '뜨는 중'}`]);
   const memos = info.memos.filter((m) => m.text || m.photos?.length);
   if (memos.length) {
@@ -552,6 +560,8 @@ function normInfo(info = {}) {
   info.needles = info.needles || [];
   info.gauge = info.gauge || {};
   info.gauge.photos = info.gauge.photos || [];
+  info.gauge.after = info.gauge.after || {}; // 세탁 후
+  info.gauge.after.photos = info.gauge.after.photos || [];
   if (!Array.isArray(info.memos)) info.memos = info.memo ? [{ id: db.uid(), text: info.memo, at: null, photos: [] }] : [];
   delete info.memo;
   return info;
@@ -559,7 +569,7 @@ function normInfo(info = {}) {
 // 작품에 붙은 사진 id 전부
 function photoIdsOf(proj) {
   const i = proj.info || {};
-  return [...(i.gauge?.photos || []), ...(i.memos || []).flatMap((m) => m.photos || [])];
+  return [...(i.gauge?.photos || []), ...(i.gauge?.after?.photos || []), ...(i.memos || []).flatMap((m) => m.photos || [])];
 }
 
 // 사진을 긴 변 1600px 이하 JPEG로 줄여 저장하고 id를 돌려준다
@@ -645,14 +655,30 @@ async function viewInfo(pid) {
       <button type="button" class="btn dashed" data-add="yarns">${icon.plus}실 추가</button>`;
     if (infoTab === 'needle') return `<div id="needles">${info.needles.map(needleRow).join('') || '<p class="hint center">아직 적은 바늘이 없습니다.</p>'}</div>
       <button type="button" class="btn dashed" data-add="needles">${icon.plus}바늘 추가</button>`;
-    if (infoTab === 'gauge') return `<div class="label">10cm × 10cm 안에</div>
-      <div class="rep-two">
-        <div class="field"><label for="g-sts">코</label><input id="g-sts" class="input" inputmode="decimal" value="${esc(info.gauge.sts || '')}"></div>
-        <div class="field"><label for="g-rows">단</label><input id="g-rows" class="input" inputmode="decimal" value="${esc(info.gauge.rows || '')}"></div>
-      </div>
+    if (infoTab === 'gauge') {
+      const A = info.gauge.after;
+      const diff = (b, a) => {
+        const x = parseFloat(b), y = parseFloat(a);
+        if (!(x > 0) || !(y > 0) || x === y) return '';
+        return `${y > x ? '+' : ''}${+(y - x).toFixed(1)}`;
+      };
+      const ds = diff(info.gauge.sts, A.sts), dr = diff(info.gauge.rows, A.rows);
+      return `<p class="hint">10cm × 10cm 안의 코 수와 단 수</p>
       <input id="g-note" class="input" placeholder="무늬·바늘 (예: 메리야스, 4mm)" value="${esc(info.gauge.note || '')}" autocomplete="off">
-      <div class="label">스와치 사진</div>
-      ${photosHtml(info.gauge.photos, 'gauge')}`;
+      <div class="rep-row"><b>세탁 전</b>
+        <div class="rep-two">
+          <div class="field"><label for="g-sts">코</label><input id="g-sts" class="input" inputmode="decimal" value="${esc(info.gauge.sts || '')}"></div>
+          <div class="field"><label for="g-rows">단</label><input id="g-rows" class="input" inputmode="decimal" value="${esc(info.gauge.rows || '')}"></div>
+        </div>
+        ${photosHtml(info.gauge.photos, 'gauge')}</div>
+      <div class="rep-row"><b>세탁 후</b>
+        <div class="rep-two">
+          <div class="field"><label for="g2-sts">코</label><input id="g2-sts" class="input" inputmode="decimal" value="${esc(A.sts || '')}"></div>
+          <div class="field"><label for="g2-rows">단</label><input id="g2-rows" class="input" inputmode="decimal" value="${esc(A.rows || '')}"></div>
+        </div>
+        ${ds || dr ? `<span class="small muted">세탁 전보다 ${[ds && `코 ${ds}`, dr && `단 ${dr}`].filter(Boolean).join(' · ')}</span>` : ''}
+        ${photosHtml(A.photos, 'gauge2')}</div>`;
+    }
     if (infoTab === 'memo') return `<button type="button" class="btn dashed" data-add="memos">${icon.plus}새 메모</button>
       <div id="memos">${info.memos.map(memoRow).join('') || '<p class="hint center">아직 메모가 없습니다.</p>'}</div>`;
     return `<div class="rep-two">
@@ -662,7 +688,7 @@ async function viewInfo(pid) {
       <p class="hint">완성한 날을 비워 두면 '뜨는 중'으로 보입니다.</p>`;
   };
   const count = (k) => ({ yarn: info.yarns.length, needle: info.needles.length, memo: info.memos.length,
-    gauge: info.gauge.sts || info.gauge.rows || info.gauge.photos.length ? '✓' : 0, date: info.start ? '✓' : 0 }[k]);
+    gauge: info.gauge.sts || info.gauge.rows || info.gauge.photos.length || info.gauge.after.sts || info.gauge.after.rows || info.gauge.after.photos.length ? '✓' : 0, date: info.start ? '✓' : 0 }[k]);
   const render = () => {
     app.innerHTML = `${header(`#/p/${pid}`, '작품 정보', esc(proj.name))}
     <div class="tabs" role="tablist">${INFO_TABS.map(([k, l]) =>
@@ -673,7 +699,7 @@ async function viewInfo(pid) {
     bind();
     app.querySelectorAll('img[data-src]').forEach(async (im) => { const u = await urlOf(im.dataset.src); if (u) im.src = u; });
   };
-  const listOf = (where) => (where === 'gauge' ? info.gauge.photos : (info.memos[+where.split(':')[1]].photos ||= []));
+  const listOf = (where) => (where === 'gauge' ? info.gauge.photos : where === 'gauge2' ? info.gauge.after.photos : (info.memos[+where.split(':')[1]].photos ||= []));
   const collect = () => {
     for (const key of ['yarns', 'needles', 'memos']) {
       app.querySelectorAll(`#${key} .rep-row`).forEach((row) => {
@@ -682,7 +708,10 @@ async function viewInfo(pid) {
       });
     }
     const v = (id) => app.querySelector(id)?.value.trim();
-    if (app.querySelector('#g-sts')) Object.assign(info.gauge, { sts: v('#g-sts'), rows: v('#g-rows'), note: v('#g-note') });
+    if (app.querySelector('#g-sts')) {
+      Object.assign(info.gauge, { sts: v('#g-sts'), rows: v('#g-rows'), note: v('#g-note') });
+      Object.assign(info.gauge.after, { sts: v('#g2-sts'), rows: v('#g2-rows') });
+    }
     if (app.querySelector('#d-start')) { info.start = v('#d-start'); info.end = v('#d-end'); }
   };
   let t;

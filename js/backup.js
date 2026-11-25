@@ -19,7 +19,7 @@ export async function buildBackup() {
   // 작품 정보에 붙인 사진(게이지·메모)
   for (const p of projects) {
     const i = p.info || {};
-    for (const id of [...(i.gauge?.photos || []), ...(i.memos || []).flatMap((m) => m.photos || [])]) {
+    for (const id of [...(i.gauge?.photos || []), ...(i.gauge?.after?.photos || []), ...(i.memos || []).flatMap((m) => m.photos || [])]) {
       if (files.some((f) => f.id === id)) continue;
       const buf = await db.get('files', id);
       if (!buf) continue;
