@@ -13,7 +13,7 @@ import { validRing, ringOnView, stadium } from './circ.js';
 import { readSizeGroups, findSizeInfo } from './sizes.js';
 import { scanVideos, isYoutube, hostOf } from './videos.js';
 
-const APP_VERSION = '1.18.0';
+const APP_VERSION = '1.18.1';
 const app = document.getElementById('app');
 const go = (h) => { location.hash = h; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));

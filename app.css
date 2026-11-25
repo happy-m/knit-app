@@ -3,12 +3,13 @@
 :root {
   --ink: #2F3B33;
   --sub: #6E766D;
-  --line: #E6DECF;
-  --ground: #FCF6EC;
-  --white: #FFFDF8;
+  --line: #E3E3DF;
+  --ground: #F5F5F3;
+  --white: #FFFFFF;
   --hl: #FFD86B;
   --mark: #D9645A;
-  --teal: #6E8B6A;
+  --teal: #7A6252;
+  --btn: #7A6252;
   --sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --sat: env(safe-area-inset-top, 0px);
@@ -44,12 +45,12 @@ a { color: var(--ink); }
 .btn { min-height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--white);
   font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   text-decoration: none; color: var(--ink); white-space: nowrap; }
-.btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); min-height: 48px; font-size: 15px; }
+.btn.primary { background: var(--btn); color: #fff; border-color: var(--btn); min-height: 48px; font-size: 15px; }
 .btn.primary.small { min-height: 44px; font-size: 14px; }
 .btn.danger { background: var(--mark); color: #fff; border-color: var(--mark); }
 .btn.dashed { border: 1.5px dashed var(--sub); background: transparent; min-height: 48px; font-size: 15px; }
 .btn:disabled { opacity: .35; cursor: default; }
-.btn[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+.btn[aria-pressed="true"] { background: var(--btn); color: #fff; border-color: var(--btn); }
 .link-btn { border: 0; background: transparent; color: var(--ink); text-decoration: underline; margin: 0 auto; padding: 0 12px; min-height: 44px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 500; }
 .icon-btn { width: 44px; height: 44px; border: 0; background: transparent; display: inline-flex; align-items: center;
   justify-content: center; color: var(--ink); flex: none; border-radius: 10px; }
@@ -74,7 +75,7 @@ a { color: var(--ink); }
 .suffix span { position: absolute; right: 12px; top: 0; line-height: 48px; color: var(--sub); font-size: 13px; }
 .seg { display: flex; gap: 8px; }
 .seg button { flex: 1; min-height: 48px; border-radius: 12px; border: 1px solid var(--line); background: var(--white); font-size: 15px; font-weight: 600; }
-.seg button[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--btn); color: #fff; border-color: var(--btn); }
 
 /* 작품 목록 */
 .proj { display: flex; flex-direction: column; gap: 12px; }
@@ -122,7 +123,7 @@ a { color: var(--ink); }
   background: var(--white); border: 1px solid var(--line); }
 .step.done .num { background: var(--teal); color: #fff; border-color: var(--teal); }
 .step.now { color: var(--ink); font-weight: 700; }
-.step.now .num { background: var(--ink); color: #fff; border-color: var(--ink); }
+.step.now .num { background: var(--btn); color: #fff; border-color: var(--btn); }
 .pv-box { flex: 1; min-height: 200px; margin: 0 20px; display: flex; align-items: center; justify-content: center; }
 .pv-stage { position: relative; touch-action: none; background: var(--white); box-shadow: 0 0 0 1px var(--line); }
 .pv-stage canvas { display: block; }
@@ -162,14 +163,14 @@ a { color: var(--ink); }
 /* 지금 단: 칸 안은 거의 비워 두고 위아래 바깥쪽에 선만 그어 기호를 가리지 않는다 */
 .band { background: rgba(255, 216, 107, 0.16); box-shadow: 0 -2.5px 0 #E8B400, 0 2.5px 0 #E8B400; }
 /* 글 설명: 읽는 줄 말고 나머지를 흐리게, 줄 아래에 형광펜 밑줄 */
-.cv-ov .ruler-dim { background: rgba(252, 246, 236, 0.62); }
+.cv-ov .ruler-dim { background: rgba(245, 245, 243, 0.62); }
 .cv-ov .ruler-line { border-bottom: 5px solid var(--hl); border-left: 5px solid #F2C200; box-sizing: border-box; }
 .shade { background: rgba(255, 255, 255, .62); }
 .mark { border: 3px solid var(--mark); border-radius: 4px; }
 .mark-tag { transform: translate(-50%, calc(-100% - 4px)); background: var(--mark); color: #fff; font-size: 13px; font-weight: 700;
   padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
 .gl { background: rgba(215, 38, 61, .7); }
-.gl.weak { background: rgba(110, 139, 106, .35); }
+.gl.weak { background: rgba(122, 98, 82, .35); }
 .guide { background: rgba(215, 38, 61, .45); }
 .pin { width: 22px; height: 22px; border-radius: 11px; background: var(--mark); color: #fff; font-family: var(--mono); font-size: 12px;
   font-weight: 700; display: flex !important; align-items: center; justify-content: center; transform: translate(10px, calc(-100% - 10px));
@@ -201,7 +202,7 @@ a { color: var(--ink); }
 .rc-u { font-size: 14px; font-weight: 600; }
 .rc-line { font-size: 13px; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .mk { display: inline-block; width: 10px; height: 10px; border: 2px solid var(--mark); border-radius: 2px; }
-.next-btn { grid-column: 2; grid-row: 1 / span 2; min-height: 120px; border: 0; border-radius: 16px; background: var(--ink); color: #fff;
+.next-btn { grid-column: 2; grid-row: 1 / span 2; min-height: 120px; border: 0; border-radius: 16px; background: var(--btn); color: #fff;
   font-size: 24px; font-weight: 700; }
 .next-btn:disabled { background: var(--sub); }
 .prev-btn { grid-column: 1; grid-row: 2; }
@@ -291,7 +292,7 @@ textarea.input.area { padding: 12px; min-height: 120px; line-height: 1.5; resize
 .proj-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 10px; }
 .pr-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; padding: 2px; }
 .ring { --p: 0%; width: 56px; height: 56px; flex: none; border-radius: 50%; position: relative;
-  background: conic-gradient(var(--teal) var(--p), #EFE9DD 0); }
+  background: conic-gradient(var(--teal) var(--p), #E9E9E5 0); }
 .ring > span { position: absolute; inset: 6px; border-radius: 50%; background: var(--white); display: grid; place-items: center;
   font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; letter-spacing: -0.3px; }
 .ring.is-long > span { font-size: 12px; }
@@ -304,14 +305,14 @@ textarea.input.area { padding: 12px; min-height: 120px; line-height: 1.5; resize
 .pr-t b { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pr-sub { font-size: 13px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pr-sub .red { color: var(--mark); font-weight: 600; }
-.play { width: 46px; height: 46px; flex: none; border-radius: 50%; background: var(--ink); color: #fff; display: grid; place-items: center; }
+.play { width: 46px; height: 46px; flex: none; border-radius: 50%; background: var(--btn); color: #fff; display: grid; place-items: center; }
 .play svg { margin-left: 2px; }
 .empty-card b { display: inline-flex; align-items: center; gap: 6px; }
 /* 여러 페이지에 걸친 파트(구간) */
 .chip { display: inline-flex; align-items: center; min-height: 30px; padding: 0 11px; border-radius: 999px; font-size: 13px; font-weight: 700;
   background: var(--white); border: 1px solid var(--line); color: var(--ink); white-space: nowrap; }
 .chip.on { background: var(--teal); border-color: var(--teal); color: #fff; }
-.chip.ok { background: #E6EEDF; border-color: #E6EEDF; color: var(--teal); }
+.chip.ok { background: #EFE8E2; border-color: #EFE8E2; color: var(--teal); }
 .chip.here { box-shadow: inset 0 0 0 2px var(--hl); }
 .seg-chips { display: flex; gap: 6px; flex-wrap: wrap; padding: 4px 20px 8px; }
 .k-segs { padding: 0 12px 8px; flex-wrap: nowrap; overflow-x: auto; }
@@ -325,10 +326,10 @@ textarea.input.area { padding: 12px; min-height: 120px; line-height: 1.5; resize
 .sv-piece { position: relative; }
 .sv-piece canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
 .sv-div { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px; background: var(--ground); color: var(--sub); font-size: 12px; }
-.sv-div::after { content: ""; flex: 1; border-top: 1px dashed #C9C1B1; }
+.sv-div::after { content: ""; flex: 1; border-top: 1px dashed #C8C8C3; }
 .sv-div span { position: sticky; left: 10px; font-weight: 700; background: var(--ground); padding-right: 6px; }
 /* 내 사이즈 강조 */
-.cv-ov .sz-on { border: 2px solid var(--teal); background: rgba(110, 139, 106, 0.14); border-radius: 4px; margin: -2px 0 0 -3px; padding: 2px 3px; box-sizing: content-box; }
+.cv-ov .sz-on { border: 2px solid var(--teal); background: rgba(122, 98, 82, 0.14); border-radius: 4px; margin: -2px 0 0 -3px; padding: 2px 3px; box-sizing: content-box; }
 .cv-ov .sz-dim { background: rgba(255, 255, 255, 0.72); }
 .sz-chip { min-height: 40px; padding: 0 12px; border-radius: 999px; border: 1.5px solid var(--teal); background: var(--white); color: var(--teal); font-weight: 700; font-size: 14px; white-space: nowrap; }
 .sz-chip[aria-pressed="true"] { background: var(--teal); color: #fff; }
@@ -339,9 +340,9 @@ textarea.input.area { padding: 12px; min-height: 120px; line-height: 1.5; resize
 .sz-pick { border: 1.5px solid var(--line); background: var(--white); border-radius: 12px; padding: 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--ink); }
 .sz-pick b { font-size: 18px; }
 .sz-pick small { font-size: 11px; color: var(--sub); }
-.sz-pick[aria-pressed="true"] { border-color: var(--teal); background: #E6EEDF; color: var(--teal); }
+.sz-pick[aria-pressed="true"] { border-color: var(--teal); background: #EFE8E2; color: var(--teal); }
 .sz-pv-on { background: var(--teal); color: #fff; border-radius: 6px; padding: 0 6px; font-weight: 800; }
-.sz-pv-dim { color: #BDB6A8; }
+.sz-pv-dim { color: #BBBBB6; }
 .sz-tog { display: flex; justify-content: space-between; align-items: center; font-size: 15px; min-height: 44px; }
 .sz-tog input { width: 22px; height: 22px; accent-color: var(--teal); }
 /* 기호 설명 */
@@ -381,7 +382,7 @@ textarea.input.area { padding: 12px; min-height: 120px; line-height: 1.5; resize
 .cv-ov svg.ring-ov { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
 .ring-ov .rg { fill: none; stroke: var(--mark); stroke-width: 2; }
 .ring-ov .rg-start { fill: none; stroke: var(--mark); stroke-width: 1.5; stroke-dasharray: 5 4; opacity: .7; }
-.ring-ov .rg-done { fill: rgba(252, 246, 236, 0.62); }
+.ring-ov .rg-done { fill: rgba(245, 245, 243, 0.62); }
 .ring-ov .rg-now { fill: rgba(255, 216, 107, 0.16); }
 .ring-ov .rg-line { fill: none; stroke: #E8B400; stroke-width: 3; }
 .ring-ov .rg-memo circle { fill: var(--mark); }
