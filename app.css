@@ -429,3 +429,4 @@ textarea.input.area { padding: 12px; min-height: 120px; line-height: 1.5; resize
 .cv-ov .kpin-E b { background: var(--mark); }
 .cv-ov .kpin b i { position: static; transform: rotate(45deg); font-style: normal; }
 .cv-ov .kpin b::after { content: none; }
+.cv-ov .kpin-M1 b, .cv-ov .kpin-M2 b { background: #5E8C61; font-size: 10px; letter-spacing: -0.5px; }

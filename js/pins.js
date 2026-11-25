@@ -1,7 +1,7 @@
-// 도안 핀: S(오늘 시작한 곳), E(여기까지 뜸). 파트마다 하나씩, part.pins = { S: {seg, x, y, label, at}, E: … }
+// 도안 핀: S(오늘 시작한 곳), E(여기까지 뜸), M1·M2(자유롭게 쓰는 표시). 파트마다 하나씩, part.pins = { S: {seg, x, y, label, at}, … }
 import { toast } from './ui.js';
 
-const KINDS = { S: '오늘 시작한 곳', E: '여기까지 뜸' };
+const KINDS = { S: '오늘 시작한 곳', E: '여기까지 뜸', M1: '표시 1', M2: '표시 2' };
 const stamp = (at) => { const d = new Date(at); return `${d.getMonth() + 1}.${d.getDate()}`; };
 
 // 단 카드 메뉴에 넣는 항목
@@ -24,7 +24,7 @@ export function pinControl(part, save, redraw) {
     armed: () => arming,
     // 메뉴에서 고른 동작 처리. 핀 동작이었으면 true
     async handle(act) {
-      const m = /^(un)?pin([SE])$/.exec(act || '');
+      const m = /^(un)?pin(S|E|M1|M2)$/.exec(act || '');
       if (!m) return false;
       if (m[1]) {
         delete part.pins?.[m[2]];
