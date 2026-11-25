@@ -81,7 +81,7 @@ export async function rowMenu(part, row) {
   const n = memosOf(part).length;
   return sheet(`지금 ${row}단`, [
     { label: '다른 단으로 이동 (번호 입력)', value: 'jump' },
-    { label: '메모 달기 (단 번호를 적어서)', value: 'memo' },
+    { label: '메모 입력', value: 'memo' },
     ...(n ? [{ label: `메모 전체 보기 (${n}개)`, value: 'list' }] : []),
     ...pinMenuItems(part),
   ]);

@@ -1,7 +1,7 @@
-// 도안 핀: S(오늘 시작한 곳), E(여기까지 뜸), M1·M2(자유롭게 쓰는 표시). 파트마다 하나씩, part.pins = { S: {seg, x, y, label, at}, … }
+// 도안 핀: S(Start, 오늘 시작한 곳), E(End, 여기까지 뜸), M1·M2(Marker, 자유롭게 쓰는 표시). 파트마다 하나씩, part.pins = { S: {seg, x, y, label, at}, … }
 import { toast } from './ui.js';
 
-const KINDS = { S: '오늘 시작한 곳', E: '여기까지 뜸', M1: '표시 1', M2: '표시 2' };
+const KINDS = { S: 'Start', E: 'End', M1: 'Marker 1', M2: 'Marker 2' };
 const stamp = (at) => { const d = new Date(at); return `${d.getMonth() + 1}.${d.getDate()}`; };
 
 // 단 카드 메뉴에 넣는 항목
