@@ -35,7 +35,7 @@ export async function buildBackup() {
   const blob = new Blob([head, json, ...bufs], { type: 'application/octet-stream' });
   const d = new Date();
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-  return { blob, name: `뜨개도안-백업-${ymd}.knitbak`, count: projects.length };
+  return { blob, name: `뜨개한단-백업-${ymd}.knitbak`, count: projects.length };
 }
 
 export async function readBackup(file) {

@@ -1,4 +1,4 @@
-// 뜨개 도안: 시작점. 주소(#/…)마다 화면을 잇고 앱을 켠다.
+// 뜨개한단: 시작점. 주소(#/…)마다 화면을 잇고 앱을 켠다.
 import { route, setRoutes } from './core.js';
 import { viewHome, viewNew } from './views/home.js';
 import { viewProject, viewPartAdd, viewPartEdit } from './views/project.js';
