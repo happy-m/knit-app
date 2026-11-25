@@ -35,6 +35,7 @@ PDF 뜨개 도안을 보면서 지금 뜨는 단과 코 위치를 표시하는 �
 | `js/partnav.js` | 파트 상태 글귀와 화면 주소 |
 | `js/labels.js` | PDF 글자에서 단·코 번호와 글줄 읽기 |
 | `js/memo.js`, `js/legend.js`, `js/videoui.js`, `js/dialogs.js` | 단 메모, 기호 설명, 참고 영상, 공용 창 |
+| `js/rectpicker.js`, `js/pins.js` | 영역 끌어 잡기(차트·글 설명·기호 설명 공용), 도안 핀 |
 | `js/circ.js`, `js/sizes.js`, `js/videos.js`, `js/backup.js`, `js/stackview.js` | 원형 차트 계산, 사이즈 숫자 읽기, QR·링크 찾기, 백업 파일, 이어 붙여 보기 |
 | `js/version.js` | 버전 (`scripts/bump.py`가 고친다) |
 | `js/chartview.js` | 도안 영역 확대·이동, 띠와 코 표시 그리기 |

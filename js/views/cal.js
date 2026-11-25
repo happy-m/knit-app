@@ -1,6 +1,6 @@
 // 격자 맞추기(기호 차트·원형 차트)와 글 설명 영역
 import * as db from '../db.js';
-import { loadPdf, renderPage, pageSize } from '../pdf.js';
+import { loadPdf, pageSize } from '../pdf.js';
 import { ChartView } from '../chartview.js';
 import { esc, icon, toast } from '../ui.js';
 import { validPair, axis, rowsOf, startProgress, isRightSide, segsOf, segPart, pagesLabel, isCirc } from '../knitting.js';
@@ -8,6 +8,7 @@ import { validRing, ringOnView, stadium } from '../circ.js';
 import { app, go, clamp, onCleanup, header } from '../core.js';
 import { calUrl, calNextUrl, calPrevUrl, segChips } from '../partnav.js';
 import { readNumberLabels, buildTable, growToLabels, autoDetect, proposeArea, nearestLabel } from '../labels.js';
+import { rectPicker } from '../rectpicker.js';
 
 export const STEP_LABELS = ['영역', '단 번호', '코 번호', '뜨는 방식'];
 
@@ -73,95 +74,44 @@ export async function calArea(part, proj, doc, top, save) {
     <button type="button" class="link-btn" id="autoarea">차트 영역 자동으로 다시 잡기</button>
     <div class="footer"><button type="button" class="btn" id="pg">페이지 다시 고르기</button>
       <button type="button" class="btn primary" id="next" ${part.cal.area ? '' : 'disabled'}>${isCirc(part) ? '다음: 단 맞추기' : '다음: 단 번호'}</button></div>`;
-  const box = app.querySelector('#pv');
   const nextBtn = app.querySelector('#next');
-  let A = part.cal.area ? { ...part.cal.area } : null;
-  let W = 0, H = 0;
-  box.innerHTML = '<div class="pv-stage"><canvas></canvas><div class="pv-rect" hidden><i class="h tl"></i><i class="h tr"></i><i class="h bl"></i><i class="h br"></i></div></div>';
-  const stage = box.querySelector('.pv-stage');
-  const canvas = box.querySelector('canvas');
-  const rect = box.querySelector('.pv-rect');
-  const draw = () => {
-    if (!A) { rect.hidden = true; return; }
-    rect.hidden = false;
-    Object.assign(rect.style, { left: A.x * W + 'px', top: A.y * H + 'px', width: A.w * W + 'px', height: A.h * H + 'px' });
-  };
-  const layout = async () => {
-    const sz = await pageSize(doc, part.page);
-    const cssW = Math.min(box.clientWidth - 2, ((box.clientHeight - 2) * sz.w) / sz.h);
-    W = cssW;
-    H = (cssW * sz.h) / sz.w;
-    stage.style.width = W + 'px';
-    stage.style.height = H + 'px';
-    await renderPage(doc, part.page, canvas, cssW);
-    draw();
-  };
+  const picker = rectPicker(app.querySelector('#pv'), doc, {
+    page: part.page,
+    area: part.cal.area,
+    onChange: async (drawn) => {
+      // 사각형 바로 바깥에 번호 칸이 걸쳐 있으면 영역을 넓혀 포함시킨다 (대충 그려도 되도록)
+      const A = await growToLabels(doc, part.page, drawn);
+      part.cal.area = A;
+      // 새 영역 밖으로 나간 기준점은 지운다 (예전 영역에서 찍은 점이 남아 계산을 틀리게 하지 않도록)
+      const inside = (p) => p && typeof p.x === 'number' && p.x >= A.x - 0.002 && p.x <= A.x + A.w + 0.002 && p.y >= A.y - 0.002 && p.y <= A.y + A.h + 0.002;
+      for (const f of ['rows', 'cols']) {
+        const pr = part.cal[f];
+        if (!pr) continue;
+        for (const k of ['a', 'b']) if (pr[k] && !inside(pr[k])) pr[k] = {};
+      }
+      await save();
+      nextBtn.disabled = false;
+      return A;
+    },
+  });
+  onCleanup(() => picker.destroy());
   const applyProposal = async (manual) => {
     const prop = await proposeArea(doc, part.page);
     if (!prop) {
       if (manual) toast('이 페이지에서는 번호 칸을 찾지 못했습니다. 손가락으로 끌어 직접 감싸주세요.');
       return;
     }
-    A = prop;
-    part.cal.area = A;
+    part.cal.area = prop;
     // 영역이 바뀌면 예전 기준점은 다시 잡도록 지운다
     part.cal.rows = null;
     part.cal.cols = null;
     await save();
     nextBtn.disabled = false;
-    draw();
+    picker.setArea(prop);
     toast('차트 영역을 자동으로 잡았습니다. 맞지 않으면 모서리를 끌어 고치세요.', { ms: 4500 });
   };
-  if (!A) await applyProposal(false);
+  if (!part.cal.area) await applyProposal(false);
   app.querySelector('#autoarea').addEventListener('click', () => applyProposal(true));
-  const ro2 = new ResizeObserver(() => { clearTimeout(ro2.t); ro2.t = setTimeout(layout, 200); });
-  ro2.observe(box);
-  onCleanup(() => ro2.disconnect());
-
-  let anchor = null;
-  const pt = (e) => {
-    const r = stage.getBoundingClientRect();
-    return [clamp((e.clientX - r.left) / W, 0, 1), clamp((e.clientY - r.top) / H, 0, 1)];
-  };
-  stage.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    stage.setPointerCapture(e.pointerId);
-    const [x, y] = pt(e);
-    anchor = [x, y];
-    if (A) {
-      const corners = [[A.x, A.y], [A.x + A.w, A.y], [A.x, A.y + A.h], [A.x + A.w, A.y + A.h]];
-      for (let i = 0; i < 4; i++) {
-        const [cx, cy] = corners[i];
-        if (Math.hypot((cx - x) * W, (cy - y) * H) < 28) { anchor = corners[3 - i]; break; }
-      }
-    }
-  });
-  stage.addEventListener('pointermove', (e) => {
-    if (!anchor) return;
-    const [x, y] = pt(e);
-    A = { x: Math.min(x, anchor[0]), y: Math.min(y, anchor[1]), w: Math.abs(x - anchor[0]), h: Math.abs(y - anchor[1]) };
-    draw();
-  });
-  const up = async () => {
-    if (!anchor) return;
-    anchor = null;
-    if (!A || A.w * W < 16 || A.h * H < 16) { A = part.cal.area ? { ...part.cal.area } : null; draw(); return; }
-    // 사각형 바로 바깥에 번호 칸이 걸쳐 있으면 영역을 넓혀 포함시킨다 (대충 그려도 되도록)
-    A = await growToLabels(doc, part.page, A);
-    draw();
-    part.cal.area = A;
-    // 새 영역 밖으로 나간 기준점은 지운다 (예전 영역에서 찍은 점이 남아 계산을 틀리게 하지 않도록)
-    const inside = (p) => p && typeof p.x === 'number' && p.x >= A.x - 0.002 && p.x <= A.x + A.w + 0.002 && p.y >= A.y - 0.002 && p.y <= A.y + A.h + 0.002;
-    for (const f of ['rows', 'cols']) {
-      const pr = part.cal[f];
-      if (!pr) continue;
-      for (const k of ['a', 'b']) if (pr[k] && !inside(pr[k])) pr[k] = {};
-    }
-    await save();
-    nextBtn.disabled = false;
-  };
-  stage.addEventListener('pointerup', up);
-  stage.addEventListener('pointercancel', up);
   nextBtn.addEventListener('click', () => go(calNextUrl(part, 1)));
   app.querySelector('#pg').addEventListener('click', () => go(`#/pedit/${part.id}`));
 }
@@ -609,7 +559,7 @@ export async function viewTextSetup(id, segStr) {
   const last = si === segs.length - 1;
   const page = sg.page;
   // 영역을 따로 안 그려도 넘어갈 수 있게 처음에는 페이지 전체로 둔다
-  let A = sg.area ? { ...sg.area } : { x: 0.03, y: 0.03, w: 0.94, h: 0.94 };
+  const A = sg.area ? { ...sg.area } : { x: 0.03, y: 0.03, w: 0.94, h: 0.94 };
   const back = si > 0 ? `#/txt/${id}/${si - 1}` : `#/p/${proj.id}`;
   app.innerHTML = `${header(back, part.name, `글 설명 · ${page}쪽${segs.length > 1 ? ` · 구간 ${si + 1}/${segs.length}` : ''}`)}
     ${segChips(part, si, (x) => !!x.area)}
@@ -625,50 +575,11 @@ export async function viewTextSetup(id, segStr) {
     <div class="footer"><button type="button" class="btn" id="list">저장하고 목록으로</button>${last
       ? '<button type="button" class="btn primary" id="start">완료하고 뜨기 시작</button>'
       : `<button type="button" class="btn primary" id="start">다음 구간 (${segs[si + 1].page}쪽)</button>`}</div>`;
-  const box = app.querySelector('#pv');
-  box.innerHTML = '<div class="pv-stage"><canvas></canvas><div class="pv-rect"><i class="h tl"></i><i class="h tr"></i><i class="h bl"></i><i class="h br"></i></div></div>';
-  const stage = box.querySelector('.pv-stage');
-  const rect = box.querySelector('.pv-rect');
-  let W = 0, H = 0;
-  const draw = () => Object.assign(rect.style, { left: A.x * W + 'px', top: A.y * H + 'px', width: A.w * W + 'px', height: A.h * H + 'px' });
-  const layout = async () => {
-    const sz = await pageSize(doc, page);
-    const cssW = Math.min(box.clientWidth - 2, ((box.clientHeight - 2) * sz.w) / sz.h);
-    W = cssW;
-    H = (cssW * sz.h) / sz.w;
-    stage.style.width = W + 'px';
-    stage.style.height = H + 'px';
-    await renderPage(doc, page, stage.querySelector('canvas'), cssW);
-    draw();
-  };
-  await layout();
-  let anchor = null;
-  const pt = (e) => {
-    const r = stage.getBoundingClientRect();
-    return [clamp((e.clientX - r.left) / W, 0, 1), clamp((e.clientY - r.top) / H, 0, 1)];
-  };
-  stage.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    stage.setPointerCapture(e.pointerId);
-    const [x, y] = pt(e);
-    anchor = [x, y];
-    const corners = [[A.x, A.y], [A.x + A.w, A.y], [A.x, A.y + A.h], [A.x + A.w, A.y + A.h]];
-    for (let i = 0; i < 4; i++) {
-      const [cx, cy] = corners[i];
-      if (Math.hypot((cx - x) * W, (cy - y) * H) < 28) { anchor = corners[3 - i]; break; }
-    }
-  });
-  stage.addEventListener('pointermove', (e) => {
-    if (!anchor) return;
-    const [x, y] = pt(e);
-    const nA = { x: Math.min(x, anchor[0]), y: Math.min(y, anchor[1]), w: Math.abs(x - anchor[0]), h: Math.abs(y - anchor[1]) };
-    if (nA.w * W > 16 && nA.h * H > 16) { A = nA; draw(); }
-  });
-  const up = () => { anchor = null; };
-  stage.addEventListener('pointerup', up);
-  stage.addEventListener('pointercancel', up);
+  const picker = rectPicker(app.querySelector('#pv'), doc, { page, area: A });
+  onCleanup(() => picker.destroy());
+  await picker.layout();
   const finish = async (dest) => {
-    sg.area = A;
+    sg.area = picker.area();
     const gi = app.querySelector('#goal');
     if (gi) {
       const g = parseInt(gi.value.replace(/\D/g, ''), 10);
@@ -683,7 +594,7 @@ export async function viewTextSetup(id, segStr) {
   app.querySelector('#list').addEventListener('click', () => finish(`#/p/${proj.id}`));
   app.querySelector('#start').addEventListener('click', () => finish(last ? `#/k/${part.id}` : `#/txt/${part.id}/${si + 1}`));
   app.querySelector('#pg').addEventListener('click', async () => {
-    sg.area = A; // 지금 잡던 영역은 남겨 두고 이동
+    sg.area = picker.area(); // 지금 잡던 영역은 남겨 두고 이동
     await db.put('parts', part);
     go(`#/pedit/${part.id}`);
   });

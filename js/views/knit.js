@@ -81,6 +81,23 @@ function bindKnitCommon({ proj, doc, parts, id }) {
   onCleanup(() => { document.removeEventListener('visibilitychange', vis); lock?.release?.().catch(() => {}); });
 }
 
+// 단 카드: 누르면 도구 시트(단 이동·메모·핀)를 띄우고 고른 일을 한다. moveTo(r): 그 화면 방식대로 r단으로 옮기기
+function bindRowCard({ el, part, pins, range, restore, onMemoChanged, moveTo }) {
+  el.addEventListener('click', async () => {
+    const row = part.progress.row;
+    const act = await rowMenu(part, row);
+    if (await pins.handle(act)) return;
+    if (act === 'memo') { if (await editMemo(part, row)) onMemoChanged(); return; }
+    let r;
+    if (act === 'list') r = await memoList(part, true, row);
+    else if (act === 'jump') r = await keypad(range, row);
+    if (r === null || r === undefined) return;
+    const snap = JSON.stringify(part.progress);
+    await moveTo(r);
+    toast(`<b>${r}단</b>으로 이동했습니다`, { action: '취소', onAction: () => restore(snap) });
+  });
+}
+
 // 파트를 다 떴을 때 다음 파트로 넘어갈지 묻는다
 async function offerNextPart(part, nextPart, lead) {
   const yes = await dialog({
@@ -202,20 +219,15 @@ export async function viewCircKnit(part) {
     await save();
     refresh(true);
   });
-  rowcard.addEventListener('click', async () => {
-    const act = await rowMenu(part, p().row);
-    if (await pins.handle(act)) return;
-    let r;
-    if (act === 'memo') { if (await editMemo(part, p().row)) refresh(); return; }
-    if (act === 'list') r = await memoList(part, true, p().row);
-    else if (act === 'jump') r = await keypad(R, p().row);
-    if (r === null || r === undefined) return;
-    const snap = snapshot();
-    jumpTo(part, r);
-    p().touched = true;
-    await save();
-    refresh(true);
-    toast(`<b>${r}단</b>으로 이동했습니다`, { action: '취소', onAction: () => restore(snap) });
+  bindRowCard({
+    el: rowcard, part, pins, range: R, restore,
+    onMemoChanged: () => refresh(),
+    moveTo: async (r) => {
+      jumpTo(part, r);
+      p().touched = true;
+      await save();
+      refresh(true);
+    },
   });
   bindKnitCommon({ proj, doc, parts, id });
 }
@@ -433,21 +445,16 @@ export async function viewKnit(id) {
     refresh(moved ? 'first' : true);
     if (moved) toast(`<b>${moved}쪽</b> 차트로 돌아왔어요`);
   });
-  rowcard.addEventListener('click', async () => {
-    const act = await rowMenu(part, p().row);
-    if (await pins.handle(act)) return;
-    let r;
-    if (act === 'memo') { if (await editMemo(part, p().row)) refresh(false); return; }
-    if (act === 'list') r = await memoList(part, true, p().row);
-    else if (act === 'jump') r = await keypad(RR, p().row);
-    if (r === null || r === undefined) return;
-    const snap = snapshot();
-    jumpTo(part, r);
-    part.progress.touched = true;
-    await save();
-    const moved = await followSeg();
-    refresh(moved ? 'first' : true);
-    toast(`<b>${r}단</b>으로 이동했습니다`, { action: '취소', onAction: () => restore(snap) });
+  bindRowCard({
+    el: rowcard, part, pins, range: RR, restore,
+    onMemoChanged: () => refresh(false),
+    moveTo: async (r) => {
+      jumpTo(part, r);
+      part.progress.touched = true;
+      await save();
+      const moved = await followSeg();
+      refresh(moved ? 'first' : true);
+    },
   });
   bindKnitCommon({ proj, doc, parts, id });
 }
@@ -471,7 +478,6 @@ export async function viewTextKnit(part) {
   app.innerHTML = knitShell({ proj, part, parts, idx, cls: 'text-knit', top: `${proj.sizes ? `<button type="button" class="sz-chip" id="szchip" aria-pressed="true">사이즈 ${esc(proj.sizes.labels?.[proj.sizes.idx] ?? proj.sizes.idx + 1)}</button>` : ''}`, afterChart: `<p class="hint pad k-hint">읽고 있는 줄을 탭하면 형광펜 띠가 옮겨갑니다.</p>` });
 
   const save = async () => { part.updated = Date.now(); await db.put('parts', part); };
-  const snapshot = () => JSON.stringify(part.progress);
   const restore = async (s) => { part.progress = JSON.parse(s); await save(); refresh(); };
 
   // 내 사이즈 숫자 강조 (작품에 사이즈를 정해 두었을 때)
@@ -603,21 +609,16 @@ export async function viewTextKnit(part) {
     await save();
     refresh();
   });
-  rowcard.addEventListener('click', async () => {
-    const act = await rowMenu(part, p().row);
-    if (await pins.handle(act)) return;
-    let r;
-    if (act === 'memo') { if (await editMemo(part, p().row)) refresh(); return; }
-    if (act === 'list') r = await memoList(part, true, p().row);
-    else if (act === 'jump') r = await keypad(R, p().row);
-    if (r === null || r === undefined) return;
-    const snap = snapshot();
-    p().row = r;
-    p().done = false;
-    p().touched = true;
-    await save();
-    refresh();
-    toast(`<b>${r}단</b>으로 이동했습니다`, { action: '취소', onAction: () => restore(snap) });
+  bindRowCard({
+    el: rowcard, part, pins, range: R, restore,
+    onMemoChanged: () => refresh(),
+    moveTo: async (r) => {
+      p().row = r;
+      p().done = false;
+      p().touched = true;
+      await save();
+      refresh();
+    },
   });
   bindKnitCommon({ proj, doc, parts, id });
 }

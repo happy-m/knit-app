@@ -3,6 +3,7 @@ import { renderPage, pageSize } from './pdf.js';
 import { ChartView } from './chartview.js';
 import { esc, icon } from './ui.js';
 import { clamp } from './core.js';
+import { rectPicker } from './rectpicker.js';
 
 // 단 번호 입력 키패드
 export function keypad(R, current) {
@@ -65,65 +66,28 @@ export function previewPage(doc, pageNum, pickLabel) {
 export function pickRegion(doc, { title, page, area }) {
   return new Promise((resolve) => {
     let pg = page;
-    let A = area ? { ...area } : { x: 0.1, y: 0.1, w: 0.8, h: 0.4 };
     const el = document.createElement('div');
     el.className = 'docv';
     el.innerHTML = `<div class="docv-top"><b>${esc(title)}</b><span class="k-spacer"></span>
         <button type="button" class="icon-btn" data-x aria-label="닫기">${icon.close}</button></div>
       <div class="pg-step"><button type="button" class="btn" data-d="-1" aria-label="이전 페이지">‹</button><b id="pgno"></b><button type="button" class="btn" data-d="1" aria-label="다음 페이지">›</button></div>
       <p class="hint pad">기호 설명 부분을 손가락으로 끌어서 감싸주세요. 모서리를 끌면 크기를 바꿉니다.</p>
-      <div class="pv-box" id="rpv"><div class="pv-stage"><canvas></canvas><div class="pv-rect"><i class="h tl"></i><i class="h tr"></i><i class="h bl"></i><i class="h br"></i></div></div></div>
+      <div class="pv-box" id="rpv"></div>
       <div class="footer"><button type="button" class="btn" data-x>취소</button><button type="button" class="btn primary" data-ok>저장</button></div>`;
     document.getElementById('layer').appendChild(el);
-    const box = el.querySelector('#rpv');
-    const stage = el.querySelector('.pv-stage');
-    const rect = el.querySelector('.pv-rect');
-    let W = 0, H = 0;
-    const draw = () => Object.assign(rect.style, { left: A.x * W + 'px', top: A.y * H + 'px', width: A.w * W + 'px', height: A.h * H + 'px' });
-    const layout = async () => {
+    const picker = rectPicker(el.querySelector('#rpv'), doc, { page: pg, area: area || { x: 0.1, y: 0.1, w: 0.8, h: 0.4 } });
+    const show = async () => {
       el.querySelector('#pgno').textContent = `${pg}쪽 / ${doc.numPages}`;
-      const sz = await pageSize(doc, pg);
-      const cssW = Math.min(box.clientWidth - 2, ((box.clientHeight - 2) * sz.w) / sz.h);
-      W = cssW;
-      H = (cssW * sz.h) / sz.w;
-      stage.style.width = W + 'px';
-      stage.style.height = H + 'px';
-      draw();
-      await renderPage(doc, pg, stage.querySelector('canvas'), cssW);
+      await picker.setPage(pg);
     };
-    let anchor = null;
-    const pt = (e) => {
-      const r = stage.getBoundingClientRect();
-      return [clamp((e.clientX - r.left) / W, 0, 1), clamp((e.clientY - r.top) / H, 0, 1)];
-    };
-    stage.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      stage.setPointerCapture(e.pointerId);
-      const [x, y] = pt(e);
-      anchor = [x, y];
-      const corners = [[A.x, A.y], [A.x + A.w, A.y], [A.x, A.y + A.h], [A.x + A.w, A.y + A.h]];
-      for (let i = 0; i < 4; i++) {
-        const [cx, cy] = corners[i];
-        if (Math.hypot((cx - x) * W, (cy - y) * H) < 28) { anchor = corners[3 - i]; break; }
-      }
-    });
-    stage.addEventListener('pointermove', (e) => {
-      if (!anchor) return;
-      const [x, y] = pt(e);
-      const nA = { x: Math.min(x, anchor[0]), y: Math.min(y, anchor[1]), w: Math.abs(x - anchor[0]), h: Math.abs(y - anchor[1]) };
-      if (nA.w * W > 16 && nA.h * H > 16) { A = nA; draw(); }
-    });
-    const up = () => { anchor = null; };
-    stage.addEventListener('pointerup', up);
-    stage.addEventListener('pointercancel', up);
     el.querySelectorAll('[data-d]').forEach((b) => b.addEventListener('click', () => {
       const n = clamp(pg + +b.dataset.d, 1, doc.numPages);
-      if (n !== pg) { pg = n; layout(); }
+      if (n !== pg) { pg = n; show(); }
     }));
-    const done = (v) => { el.remove(); resolve(v); };
+    const done = (v) => { picker.destroy(); el.remove(); resolve(v); };
     el.querySelectorAll('[data-x]').forEach((b) => b.addEventListener('click', () => done(null)));
-    el.querySelector('[data-ok]').addEventListener('click', () => done({ page: pg, area: A }));
-    requestAnimationFrame(layout);
+    el.querySelector('[data-ok]').addEventListener('click', () => done({ page: pg, area: picker.area() }));
+    requestAnimationFrame(show);
   });
 }
 

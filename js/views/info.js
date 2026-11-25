@@ -1,10 +1,9 @@
 // 작품 정보(실·바늘·게이지·메모·영상·기간)와 사진
 import * as db from '../db.js';
 import { loadPdf } from '../pdf.js';
-import { esc, icon, toast, dialog, ask, sheet } from '../ui.js';
-import { isYoutube, hostOf } from '../videos.js';
+import { esc, icon, toast, dialog } from '../ui.js';
 import { app, go, onCleanup, header } from '../core.js';
-import { runVideoScan, videoTitle } from '../videoui.js';
+import { runVideoScan, videoTitle, videoSub, addVideoLink, editVideo } from '../videoui.js';
 
 export const NEEDLE_KINDS = ['줄바늘', '막대바늘', '장갑바늘', '코바늘', '기타'];
 
@@ -183,7 +182,7 @@ export async function viewInfo(pid) {
       const vs = proj.videos || [];
       return `<p class="hint">뜨기 화면의 '영상' 버튼과 같은 목록입니다. 누르면 유튜브(또는 그 링크)로 열립니다.</p>
       ${vs.map((x, i) => `<div class="vid-row"><button type="button" class="vid-open" data-vopen="${i}">
-          <b>${esc(videoTitle(x))}</b><span class="small muted">${esc(`${isYoutube(x.url) ? '▶ 유튜브' : /영상|동영상|video/i.test(x.title || '') ? '▶ 영상' : '🔗 링크'}${x.page ? ` · ${x.page}쪽 ${x.src === 'qr' ? 'QR' : '링크'}` : ' · 직접 추가'} · ${hostOf(x.url)}`)}</span></button>
+          <b>${esc(videoTitle(x))}</b><span class="small muted">${esc(videoSub(x))}</span></button>
           <button type="button" class="icon-btn" data-vmore="${i}" aria-label="이름 바꾸기·빼기">${icon.more || '⋯'}</button></div>`).join('')
         || `<p class="hint center">${proj.videosScanned ? '도안에서 찾은 영상이 없습니다.' : '아직 영상이 없습니다.'}</p>`}
       <button type="button" class="btn dashed" data-vadd>${icon.plus}링크 직접 추가</button>
@@ -274,24 +273,12 @@ export async function viewInfo(pid) {
     }));
     f.querySelectorAll('[data-vopen]').forEach((b) => b.addEventListener('click', () => window.open(proj.videos[+b.dataset.vopen].url, '_blank', 'noopener')));
     f.querySelectorAll('[data-vmore]').forEach((b) => b.addEventListener('click', async () => {
-      const x = proj.videos[+b.dataset.vmore];
-      const a = await sheet(videoTitle(x), [{ label: '이름 바꾸기', value: 'rename' }, { label: '목록에서 빼기', value: 'rm', danger: true }]);
-      if (a === 'rename') {
-        const n = await ask('영상 이름', x.title || '');
-        if (!n) return;
-        x.title = n;
-        x.renamed = true;
-      } else if (a === 'rm') proj.videos.splice(+b.dataset.vmore, 1);
-      else return;
+      if (!(await editVideo(proj, +b.dataset.vmore))) return;
       await save();
       render();
     }));
     f.querySelector('[data-vadd]')?.addEventListener('click', async () => {
-      const url = await ask('영상 링크', '', { placeholder: 'https://youtu.be/…', label: '유튜브 공유 버튼에서 복사한 주소를 붙여넣으세요' });
-      if (!url) return;
-      if (!/^https?:\/\//i.test(url)) { toast('http로 시작하는 주소를 넣어주세요'); return; }
-      const title = await ask('영상 이름', '', { placeholder: '예: 코잡기 영상' });
-      (proj.videos = proj.videos || []).push({ url, title: title || '', page: null, src: 'manual', renamed: !!title });
+      if (!(await addVideoLink(proj))) return;
       await save();
       render();
     });
