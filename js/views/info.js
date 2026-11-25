@@ -3,7 +3,7 @@ import * as db from '../db.js';
 import { loadPdf } from '../pdf.js';
 import { esc, icon, toast, dialog } from '../ui.js';
 import { app, go, onCleanup, header } from '../core.js';
-import { runVideoScan, videoTitle, videoSub, addVideoLink, editVideo } from '../videoui.js';
+import { runVideoScan, videoTitle, videoSub, addVideoLink, editVideo, openExternal } from '../videoui.js';
 
 export const NEEDLE_KINDS = ['줄바늘', '막대바늘', '장갑바늘', '코바늘', '기타'];
 
@@ -271,7 +271,7 @@ export async function viewInfo(pid) {
       await persist();
       render();
     }));
-    f.querySelectorAll('[data-vopen]').forEach((b) => b.addEventListener('click', () => window.open(proj.videos[+b.dataset.vopen].url, '_blank', 'noopener')));
+    f.querySelectorAll('[data-vopen]').forEach((b) => b.addEventListener('click', () => openExternal(proj.videos[+b.dataset.vopen].url)));
     f.querySelectorAll('[data-vmore]').forEach((b) => b.addEventListener('click', async () => {
       if (!(await editVideo(proj, +b.dataset.vmore))) return;
       await save();

@@ -25,6 +25,42 @@ export async function runVideoScan(proj, doc) {
   toast(found.length ? `영상·링크 ${found.length}개를 찾았습니다` : '도안에서 QR 코드나 링크를 찾지 못했습니다');
 }
 
+// 바깥 링크 열기.
+// 아이폰 홈 화면 앱에서는 window.open이 앱 안의 작은 브라우저를 띄우는데, 유튜브 앱으로 넘어가면
+// 그 브라우저가 빈 화면으로 남는다. 그래서 유튜브는 유튜브 앱을, 그 밖의 링크는 Safari를 바로 연다.
+export function openExternal(url) {
+  const fallback = () => window.open(url, '_blank', 'noopener');
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  const standalone = navigator.standalone || window.matchMedia?.('(display-mode: standalone)').matches;
+  if (!ios || !standalone) return fallback();
+  let target;
+  try {
+    const u = new URL(url);
+    if (isYoutube(url)) {
+      // youtu.be/ID → www.youtube.com/watch?v=ID (시작 시간 t는 그대로)
+      if (/youtu\.be$/i.test(u.hostname)) {
+        const id = u.pathname.slice(1);
+        u.searchParams.set('v', id);
+        u.pathname = '/watch';
+      }
+      target = `youtube://www.youtube.com${u.pathname}${u.search}`;
+    } else {
+      target = url.replace(/^http/i, 'x-safari-http');
+    }
+  } catch {
+    return fallback();
+  }
+  // 앱이 열리면 이 화면은 가려진다. 1.5초 안에 안 가려지면(앱이 없거나 주소를 못 여는 경우) 원래 방식으로 연다
+  let left = false;
+  const onHide = () => { if (document.visibilityState === 'hidden') left = true; };
+  document.addEventListener('visibilitychange', onHide);
+  setTimeout(() => {
+    document.removeEventListener('visibilitychange', onHide);
+    if (!left) fallback();
+  }, 1500);
+  location.href = target;
+}
+
 export const videoTitle = (v) => v.title || `${v.page ? `${v.page}쪽 ` : ''}${isYoutube(v.url) ? '영상' : '링크'}`;
 
 // 영상 한 줄 아래에 붙는 설명: 종류 · 어디서 왔는지 · 사이트
@@ -66,7 +102,7 @@ export async function videoMenu(proj, doc) {
     { label: '도안에서 다시 찾기', value: 'rescan' },
   ]);
   if (v === undefined) return;
-  if (typeof v === 'number') { window.open(list[v].url, '_blank', 'noopener'); return; }
+  if (typeof v === 'number') { openExternal(list[v].url); return; }
   if (v === 'rescan') await runVideoScan(proj, doc);
   else if (v === 'add') { if (await addVideoLink(proj)) await db.put('projects', proj); }
   else if (v === 'edit') {
