@@ -1,6 +1,6 @@
 // 백업 파일: 작품·파트·진행 기록과 도안 PDF를 파일 하나로 묶는다.
 // 형식: "KNITBAK1"(8바이트) + JSON 길이(uint32 LE) + JSON(UTF-8) + PDF 데이터들을 이어 붙임
-import * as db from './db.js';
+import * as db from '../db.js';
 
 const MAGIC = 'KNITBAK1';
 

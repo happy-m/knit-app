@@ -1,8 +1,8 @@
 // 기호 설명(범례)
-import * as db from './db.js';
-import { StackView } from './stackview.js';
-import { icon, dialog, sheet } from './ui.js';
-import { app, onCleanup } from './core.js';
+import * as db from '../db.js';
+import { StackView } from '../widgets/stackview.js';
+import { icon, dialog, sheet } from '../ui.js';
+import { app, onCleanup } from '../core.js';
 import { pickRegion } from './dialogs.js';
 
 // 기호 설명이 있을 법한 페이지: 뜨개 약어·기호 이름이 가장 많이 나오는 페이지

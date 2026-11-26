@@ -1,9 +1,10 @@
 // 첫 화면(작품 목록), 새 작품, 백업
 import * as db from '../db.js';
 import { openPdfData, forgetPdf } from '../pdf.js';
-import { buildBackup, readBackup, restoreBackup } from '../backup.js';
+import { buildBackup, readBackup, restoreBackup } from '../model/backup.js';
 import { esc, icon, eul, toast, dialog, ask, sheet } from '../ui.js';
-import { rowsOf, partStatus, isText , progressFrac } from '../knitting.js';
+import { rowsOf, partStatus, isText } from '../model/knitting.js';
+import { progressFrac } from '../model/progress.js';
 import { APP_VERSION } from '../version.js';
 import { app, go, clamp, route, header } from '../core.js';
 import { partHref, currentPart } from '../partnav.js';

@@ -1,8 +1,8 @@
 // 반복 화면: 구간 반복(몇 단~몇 단을 몇 번)과 전체 반복(차트 전체를 몇 번)을 정하고 고친다
 // 계산은 knitting.js에 있다 (repsOf, nextRow …)
-import { uid } from './db.js';
-import { esc, toast } from './ui.js';
-import { repsOf, activeRange, wholeRepeat, knitIndex, rangeProblem, endRange } from './knitting.js';
+import { uid } from '../db.js';
+import { esc, toast } from '../ui.js';
+import { repsOf, activeRange, wholeRepeat, knitIndex, rangeProblem, endRange } from '../model/progress.js';
 
 const layer = () => document.getElementById('layer');
 const num = (el) => { const v = parseInt((el.value || '').replace(/\D/g, ''), 10); return Number.isInteger(v) ? v : null; };

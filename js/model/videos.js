@@ -1,5 +1,5 @@
 // 도안 속 참고 영상 찾기: 페이지의 QR 코드와 링크를 읽어 주소 목록을 만든다
-import { OPS } from '../vendor/pdf.min.mjs';
+import { OPS } from '../../vendor/pdf.min.mjs';
 const QR_WIDTH = 1700; // QR 코드를 읽을 때 페이지를 그리는 폭(px)
 
 let jsQRP = null;

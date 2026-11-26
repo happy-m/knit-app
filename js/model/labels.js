@@ -1,6 +1,6 @@
 // PDF 글자에서 단·코 번호와 글줄 읽기
 import { validPair } from './knitting.js';
-import { clamp } from './core.js';
+import { clamp } from '../core.js';
 
 // PDF 글자 층에서 숫자만 모아 둔다 (영역 안쪽, 정규화 좌표)
 export async function readNumberLabels(page, area, margin = 0) {

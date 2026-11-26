@@ -3,7 +3,7 @@ import * as db from '../db.js';
 import { loadPdf } from '../pdf.js';
 import { esc, icon, toast, dialog } from '../ui.js';
 import { app, go, onCleanup, header } from '../core.js';
-import { runVideoScan, videoTitle, videoSub, addVideoLink, editVideo, openExternal } from '../videoui.js';
+import { runVideoScan, videoTitle, videoSub, addVideoLink, editVideo, openExternal } from '../sheets/videoui.js';
 
 export const NEEDLE_KINDS = ['줄바늘', '막대바늘', '장갑바늘', '코바늘', '기타'];
 

@@ -1,6 +1,6 @@
 // 파트 상태 글귀와 화면 주소
-import { calibrated, rowsOf, partStatus, isText, segsOf, segReady, pagesLabel, isCirc } from './knitting.js';
-import { repSummary } from './reps.js';
+import { calibrated, rowsOf, partStatus, isText, segsOf, segReady, pagesLabel, isCirc } from './model/knitting.js';
+import { repSummary } from './sheets/reps.js';
 
 export function partMeta(part) {
   const pages = pagesLabel(part);

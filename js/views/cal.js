@@ -1,14 +1,15 @@
 // 격자 맞추기(기호 차트·원형 차트)와 글 설명 영역
 import * as db from '../db.js';
 import { loadPdf, pageSize } from '../pdf.js';
-import { ChartView } from '../chartview.js';
+import { ChartView } from '../widgets/chartview.js';
 import { esc, icon, toast } from '../ui.js';
-import { validPair, axis, rowsOf, startProgress, isRightSide, segsOf, segPart, pagesLabel, isCirc } from '../knitting.js';
-import { validRing, ringOnView, stadium } from '../circ.js';
+import { validPair, axis, rowsOf, segsOf, segPart, pagesLabel, isCirc } from '../model/knitting.js';
+import { startProgress, isRightSide } from '../model/progress.js';
+import { validRing, ringOnView, stadium } from '../model/circ.js';
 import { app, go, clamp, onCleanup, header } from '../core.js';
 import { calUrl, calNextUrl, calPrevUrl, segChips } from '../partnav.js';
-import { readNumberLabels, buildTable, growToLabels, autoDetect, proposeArea, nearestLabel } from '../labels.js';
-import { rectPicker } from '../rectpicker.js';
+import { readNumberLabels, buildTable, growToLabels, autoDetect, proposeArea, nearestLabel } from '../model/labels.js';
+import { rectPicker } from '../widgets/rectpicker.js';
 
 export const STEP_LABELS = ['영역', '단 번호', '코 번호', '뜨는 방식'];
 

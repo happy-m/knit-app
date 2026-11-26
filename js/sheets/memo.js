@@ -1,6 +1,6 @@
 // 단 메모
-import * as db from './db.js';
-import { esc, toast, sheet } from './ui.js';
+import * as db from '../db.js';
+import { esc, toast, sheet } from '../ui.js';
 import { PIN_KINDS, pinWhere } from './pins.js';
 
 export const memosOf = (part) => (Array.isArray(part.memos) ? part.memos : (part.memos = []));

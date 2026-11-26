@@ -1,6 +1,6 @@
 // 여러 페이지의 영역(구간)을 위아래로 이어 붙여 한 장처럼 보여주는 뷰 (글 설명 파트용)
 // 좌표: 구간 i 안에서 페이지 기준 0~1 정규화 좌표 (nx, ny)
-import { dpr } from './pdf.js';
+import { dpr } from '../pdf.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const dist = (a, b) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);

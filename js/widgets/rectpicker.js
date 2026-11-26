@@ -1,6 +1,6 @@
 // 페이지 그림 위에서 사각형 영역을 끌어 잡는 도구 (차트 영역, 글 설명 영역, 기호 설명 영역이 함께 쓴다)
 // 영역 좌표는 페이지 기준 0~1 ({x, y, w, h})
-import { renderPage, pageSize } from './pdf.js';
+import { renderPage, pageSize } from '../pdf.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const MIN_PX = 16; // 이보다 작게 끌면 실수로 보고 되돌린다

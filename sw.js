@@ -1,12 +1,13 @@
 // 앱 파일을 폰에 저장해 두고 인터넷 없이도 열리게 한다.
 // 코드를 고친 뒤에는 scripts/bump.py로 버전을 올린다 (CHANGELOG.md 참고).
-const VERSION = 'knit-1.28.0';
+const VERSION = 'knit-1.28.1';
 const ASSETS = [
   './', 'index.html', 'app.css', 'manifest.webmanifest',
-  'js/backup.js', 'js/chartview.js', 'js/circ.js', 'js/core.js', 'js/db.js', 'js/dialogs.js',
-  'js/knitting.js', 'js/labels.js', 'js/legend.js', 'js/main.js', 'js/memo.js', 'js/partnav.js',
-  'js/pdf.js', 'js/pins.js', 'js/rectpicker.js', 'js/reps.js', 'js/sizes.js', 'js/stackview.js', 'js/ui.js', 'js/version.js', 'js/videos.js',
-  'js/videoui.js', 'js/views/cal.js', 'js/views/home.js', 'js/views/info.js', 'js/views/knit.js', 'js/views/project.js',
+  'js/core.js', 'js/db.js', 'js/main.js', 'js/model/backup.js', 'js/model/circ.js', 'js/model/knitting.js', 'js/model/labels.js',
+  'js/model/progress.js', 'js/model/sizes.js', 'js/model/videos.js', 'js/partnav.js', 'js/pdf.js', 'js/sheets/dialogs.js', 'js/sheets/legend.js',
+  'js/sheets/memo.js', 'js/sheets/pins.js', 'js/sheets/reps.js', 'js/sheets/videoui.js', 'js/ui.js', 'js/version.js', 'js/views/cal.js',
+  'js/views/home.js', 'js/views/info.js', 'js/views/knit/chart.js', 'js/views/knit/circ.js', 'js/views/knit/index.js', 'js/views/knit/shell.js',
+  'js/views/knit/text.js', 'js/views/project.js', 'js/widgets/chartview.js', 'js/widgets/rectpicker.js', 'js/widgets/stackview.js',
   'vendor/jsQR.min.js',
   'vendor/pdf.min.mjs', 'vendor/pdf.worker.min.mjs',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',

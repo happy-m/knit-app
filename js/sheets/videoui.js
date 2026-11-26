@@ -1,7 +1,7 @@
 // 참고 영상 목록
-import * as db from './db.js';
-import { esc, toast, ask, sheet } from './ui.js';
-import { scanVideos, isYoutube, hostOf } from './videos.js';
+import * as db from '../db.js';
+import { esc, toast, ask, sheet } from '../ui.js';
+import { scanVideos, isYoutube, hostOf } from '../model/videos.js';
 
 export async function runVideoScan(proj, doc) {
   const t = toast('도안에서 QR 코드와 링크를 찾는 중…', { ms: 120000 });

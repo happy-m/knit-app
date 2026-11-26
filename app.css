@@ -79,12 +79,6 @@ a { color: var(--ink); }
 
 /* 작품 목록 */
 .proj { display: flex; flex-direction: column; gap: 12px; }
-.proj-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.proj-head h2 { margin: 0; font-size: 19px; }
-.proj-cur .label { margin-bottom: 4px; }
-.cur-line { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.cur-name { font-size: 16px; font-weight: 600; }
-.cur-line .pill-hl { font-size: 20px; }
 .bar { height: 8px; border-radius: 4px; background: var(--ground); overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--teal); }
 .empty-card { border: 1.5px dashed var(--line); border-radius: 16px; padding: 22px 18px; display: flex; flex-direction: column;

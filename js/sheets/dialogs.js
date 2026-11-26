@@ -1,9 +1,9 @@
 // 공용 창: 숫자판, 페이지 미리보기, 영역 고르기, 도안 보기
-import { renderPage, pageSize } from './pdf.js';
-import { ChartView } from './chartview.js';
-import { esc, icon } from './ui.js';
-import { clamp } from './core.js';
-import { rectPicker } from './rectpicker.js';
+import { renderPage, pageSize } from '../pdf.js';
+import { ChartView } from '../widgets/chartview.js';
+import { esc, icon } from '../ui.js';
+import { clamp } from '../core.js';
+import { rectPicker } from '../widgets/rectpicker.js';
 
 // 단 번호 입력 키패드
 export function keypad(R, current) {

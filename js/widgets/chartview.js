@@ -1,6 +1,6 @@
 // 도안 PDF의 한 영역을 확대·이동하며 보여주고, 그 위에 띠·표시를 얹는 뷰
 // 좌표: n = 페이지 기준 0~1 정규화 좌표, p = 콘텐츠 css px
-import { dpr } from './pdf.js';
+import { dpr } from '../pdf.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const dist = (a, b) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);

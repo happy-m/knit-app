@@ -2,14 +2,14 @@
 import * as db from '../db.js';
 import { loadPdf, renderPage } from '../pdf.js';
 import { esc, icon, toast, dialog, ask, sheet } from '../ui.js';
-import { calibrated, rowsOf, partStatus, isText, segsOf, segReady, kindOf } from '../knitting.js';
-import { findSizeInfo } from '../sizes.js';
+import { calibrated, rowsOf, partStatus, isText, segsOf, segReady, kindOf } from '../model/knitting.js';
+import { findSizeInfo } from '../model/sizes.js';
 import { app, go, clamp, onCleanup, route, header } from '../core.js';
 import { partMeta, partHref, calUrl } from '../partnav.js';
 import { removeProject } from './home.js';
 import { infoCard } from './info.js';
-import { memosOf, memoList } from '../memo.js';
-import { previewPage, openDoc } from '../dialogs.js';
+import { memosOf, memoList } from '../sheets/memo.js';
+import { previewPage, openDoc } from '../sheets/dialogs.js';
 
 export async function viewProject(pid) {
   const proj = await db.get('projects', pid);

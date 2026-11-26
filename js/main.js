@@ -4,7 +4,7 @@ import { viewHome, viewNew } from './views/home.js';
 import { viewProject, viewPartAdd, viewPartEdit } from './views/project.js';
 import { viewInfo } from './views/info.js';
 import { viewCal, viewTextSetup } from './views/cal.js';
-import { viewKnit } from './views/knit.js';
+import { viewKnit } from './views/knit/index.js';
 
 setRoutes([
   [/^#\/?$/, viewHome],
