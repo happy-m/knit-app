@@ -149,14 +149,13 @@ export async function viewCircKnit(part) {
       paths += `<path d="${outer}" class="rg-line"/>`;
       if (inner) paths += `<path d="${inner}" class="rg-line"/>`;
     }
-    // 구간 반복: 안팎 테두리를 점선으로, 오른쪽에 횟수
+    // 구간 반복: 안팎 테두리를 점선으로
     for (const rg of repsOf(part).ranges) {
       if (rg.from > ring.n) continue;
       const out = g.rpx(Math.min(rg.to, ring.n));
       const inn = stadium(g.Apx, g.Bpx, g.rpx(rg.from - 1));
       paths += `<path d="${stadium(g.Apx, g.Bpx, out)}" class="rg-rep"/>`;
       if (inn) paths += `<path d="${inn}" class="rg-rep"/>`;
-      paths += `<text class="rg-rep-t" x="${g.Bpx[0] + out + 4}" y="${g.Bpx[1] - 6}">×${rg.times || '?'}</text>`;
     }
     for (const m of memosOf(part)) {
       if (m.row < 1 || m.row > ring.n) continue;
@@ -307,7 +306,7 @@ export async function viewKnit(id) {
         h += `<span class="mark-tag" style="left:${(x1 + x2) / 2}px;top:${y1}px">${pr.mark}번 칸</span>`;
       }
     }
-    // 구간 반복: 왼쪽에 꺾쇠와 횟수 (이 쪽에 걸친 부분만)
+    // 구간 반복: 왼쪽 가장자리에 꺾쇠만 (횟수는 단 카드에 나온다)
     for (const rg of repsOf(part).ranges) {
       const a = Math.max(rg.from, R.lo);
       const b = Math.min(rg.to, R.hi);
@@ -315,7 +314,7 @@ export async function viewKnit(id) {
       const ys = [...edge(a), ...edge(b)].map((n) => v.n2p(0, n)[1]);
       const y1 = Math.min(...ys);
       const y2 = Math.max(...ys);
-      h += `<i class="rep-br" style="top:${y1}px;height:${y2 - y1}px"></i><span class="rep-tag" style="top:${(y1 + y2) / 2}px">×${rg.times || '?'}</span>`;
+      h += `<i class="rep-br" style="top:${y1}px;height:${y2 - y1}px"></i>`;
     }
     // 메모가 있는 단은 왼쪽에 ✎ 표시
     for (const m of memosOf(part)) {

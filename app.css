@@ -460,8 +460,5 @@ textarea.input.area { padding: 12px; min-height: 120px; line-height: 1.5; resize
 .rep-fields label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--sub); }
 .rep-fields .input { width: 100%; padding-right: 44px; }
 .rep-extra { min-height: 44px; }
-.cv-ov .rep-br { position: absolute; left: 1px; width: 8px; border: 2.5px solid var(--teal); border-right: 0; border-radius: 4px 0 0 4px; pointer-events: none; }
-.cv-ov .rep-tag { position: absolute; left: 12px; transform: translateY(-50%); background: var(--teal); color: #fff; font-size: 11px; font-weight: 800;
-  padding: 2px 6px; border-radius: 8px; pointer-events: none; }
+.cv-ov .rep-br { position: absolute; left: 0; width: 5px; border: 2px solid var(--teal); border-right: 0; border-radius: 4px 0 0 4px; pointer-events: none; }
 .ring-ov .rg-rep { fill: none; stroke: var(--teal); stroke-width: 2; stroke-dasharray: 6 4; }
-.ring-ov .rg-rep-t { fill: var(--teal); font-size: 12px; font-weight: 800; }
