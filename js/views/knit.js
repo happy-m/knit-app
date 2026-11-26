@@ -15,7 +15,7 @@ import { toggleLegend } from '../legend.js';
 import { keypad, openDoc } from '../dialogs.js';
 import { videoMenu } from '../videoui.js';
 import { pinControl } from '../pins.js';
-import { repLines, repNote, repeatSheet } from '../reps.js';
+import { repLines, repNote, repeatSheet, rowPick } from '../reps.js';
 
 // ---- 세 가지 뜨기 화면이 함께 쓰는 것 ----
 
@@ -198,10 +198,12 @@ export async function viewCircKnit(part) {
     doc, pageNum: sg.page, area: sg.area, decorate,
     onScale: (sc) => { try { localStorage.setItem(key, String(sc)); } catch {} },
     onTap: (nx, ny) => {
+      if (rowPick.armed()) return rowPick.tap(ringGeom(ring, sz.w, sz.h).roundAt(nx, ny));
       if (pins.armed()) return pins.place({ seg: 0, x: nx, y: ny, label: `${ringGeom(ring, sz.w, sz.h).roundAt(nx, ny)}단` });
       toast('다른 단으로 가려면 그 단을 <b>길게</b> 누르세요');
     },
     onLong: async (nx, ny) => {
+      if (rowPick.armed()) return;
       const r = ringGeom(ring, sz.w, sz.h).roundAt(nx, ny);
       if (r === p().row && !p().done) return;
       const snap = snapshot();
@@ -382,6 +384,7 @@ export async function viewKnit(id) {
       doc, pageNum: vp.page, area: vp.cal.area, decorate,
       onScale: (sc) => { try { rowPx = sc * pitchPt; localStorage.setItem(key, String(rowPx)); } catch {} },
       onTap: async (nx, ny) => {
+        if (rowPick.armed()) return rowPick.tap(clamp(R.nearest(ny), R.lo, R.hi));
         if (pins.armed()) {
           // 칸 한가운데에 맞춰 꽂는다
           const pr0 = clamp(R.nearest(ny), R.lo, R.hi);
@@ -402,6 +405,7 @@ export async function viewKnit(id) {
         refresh(false);
       },
       onLong: async (nx, ny) => {
+        if (rowPick.armed()) return;
         const pr = p();
         const r = clamp(R.nearest(ny), R.lo, R.hi);
         if (r === pr.row && !pr.done) return;

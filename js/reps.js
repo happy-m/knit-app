@@ -70,21 +70,64 @@ function form(title, hint, fields, extra = []) {
   });
 }
 
-async function editRange(part, g) {
+// 도안에서 단을 탭해 시작·끝 단을 고르는 중인지. 뜨기 화면이 탭을 이쪽으로 넘긴다
+let picking = null;
+export const rowPick = {
+  armed: () => !!picking,
+  tap: (row) => picking?.tap(row),
+};
+
+// 위쪽에 안내 띠를 띄우고 도안에서 두 단을 탭받는다. { from, to } 또는 취소하면 null
+function pickRows() {
+  return new Promise((resolve) => {
+    const bar = document.createElement('div');
+    bar.className = 'pick-bar';
+    let from = null;
+    const draw = () => {
+      bar.innerHTML = `<span>${from === null ? '반복 <b>시작 단</b>을 도안에서 탭하세요' : `시작 ${from}단 · <b>끝 단</b>을 탭하세요`}</span><button type="button">취소</button>`;
+    };
+    const done = (v) => {
+      picking = null;
+      bar.remove();
+      window.removeEventListener('hashchange', cancel);
+      resolve(v);
+    };
+    const cancel = () => done(null);
+    bar.addEventListener('click', (e) => { if (e.target.closest('button')) cancel(); });
+    window.addEventListener('hashchange', cancel);
+    picking = {
+      tap(row) {
+        if (from === null) { from = row; draw(); return; }
+        done({ from: Math.min(from, row), to: Math.max(from, row) });
+      },
+    };
+    draw();
+    layer().appendChild(bar);
+  });
+}
+
+async function editRange(part, g, pre) {
   const isNew = !g;
   const p = part.progress;
   const cur = g && activeRange(part, p)?.range === g ? activeRange(part, p).iter : null;
   const r = await form(isNew ? '구간 반복 추가' : `${g.from}~${g.to}단 반복`,
     '끝 단에서 <b>다음 단</b>을 누르면 시작 단으로 돌아갑니다. 횟수를 비우면 직접 끝낼 때까지 반복합니다.', [
-      { key: 'from', label: '시작', value: g?.from ?? p.row, unit: '단' },
-      { key: 'to', label: '끝', value: g?.to ?? '', unit: '단' },
+      { key: 'from', label: '시작', value: pre?.from ?? g?.from ?? p.row, unit: '단' },
+      { key: 'to', label: '끝', value: pre?.to ?? g?.to ?? '', unit: '단' },
       { key: 'times', label: '횟수', value: g?.times ?? '', unit: '회', optional: true },
       ...(cur ? [{ key: 'iter', label: '지금', value: cur, unit: '회차' }] : []),
-    ], isNew ? [] : [
+    ], [
+      ...(part.kind === 'text' ? [] : [{ label: '도안에서 시작·끝 단 고르기', value: 'pick' }]),
+      ...(isNew ? [] : [
       ...(cur && !g.times ? [{ label: '이 반복 끝내고 다음 단으로', value: 'end' }] : []),
-      { label: '이 반복 지우기', value: 'del', danger: true },
+      { label: '이 반복 지우기', value: 'del', danger: true }]),
     ]);
   if (!r) return false;
+  if (r.extra === 'pick') {
+    const got = await pickRows();
+    if (!got && isNew) return false;
+    return editRange(part, g, got || pre);
+  }
   const reps = repsOf(part);
   if (r.extra === 'del') {
     reps.ranges = reps.ranges.filter((x) => x !== g);
@@ -93,9 +136,9 @@ async function editRange(part, g) {
   }
   if (r.extra === 'end') { endRange(part, g); return true; }
   const next = { id: g?.id || uid(), from: r.from, to: r.to, times: r.times && r.times > 0 ? r.times : null };
-  if (next.times === 1) { toast('1회는 반복이 아니에요. 2회 이상을 적거나 비워 두세요.'); return editRange(part, g); }
+  if (next.times === 1) { toast('1회는 반복이 아니에요. 2회 이상을 적거나 비워 두세요.'); return editRange(part, g, next); }
   const bad = rangeProblem(part, next);
-  if (bad) { toast(bad); return editRange(part, g); }
+  if (bad) { toast(bad); return editRange(part, g, next); }
   if (isNew) reps.ranges.push(next); else Object.assign(g, next);
   reps.ranges.sort((a, b) => a.from - b.from);
   if (r.iter) (p.rr ||= {})[next.id] = Math.max(1, next.times ? Math.min(r.iter, next.times) : r.iter);
