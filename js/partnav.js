@@ -1,16 +1,16 @@
 // 파트 상태 글귀와 화면 주소
-import { calibrated, rowsOf, repeatTotal, partStatus, isText, segsOf, segReady, pagesLabel, isCirc } from './knitting.js';
+import { calibrated, rowsOf, partStatus, isText, segsOf, segReady, pagesLabel, isCirc } from './knitting.js';
+import { repSummary } from './reps.js';
 
 export function partMeta(part) {
   const pages = pagesLabel(part);
-  if (isText(part)) return `글 설명 · ${pages}${part.text?.goal ? ` · 목표 ${part.text.goal}단` : ''}`;
+  const rep = repSummary(part) ? ` · ${repSummary(part)}` : '';
+  if (isText(part)) return `글 설명 · ${pages}${part.text?.goal ? ` · 목표 ${part.text.goal}단` : ''}${rep}`;
   if (!calibrated(part)) return `${isCirc(part) ? '원형 · ' : ''}${pages} · 설정 중`;
-  if (isCirc(part)) return `원형 · 1~${rowsOf(part).hi}단 · ${pages}`;
+  if (isCirc(part)) return `원형 · 1~${rowsOf(part).hi}단 · ${pages}${rep}`;
   const R = rowsOf(part);
   const m = part.cal.mode;
-  const rep = repeatTotal(part);
-  return `${m.type === 'round' ? '원통' : '평면'} · ${R.lo}~${R.hi}단 · ${pages}` +
-    (rep !== null ? ` · ${rep === 0 ? '계속' : rep + '회'} 반복` : '');
+  return `${m.type === 'round' ? '원통' : '평면'} · ${R.lo}~${R.hi}단 · ${pages}${rep}`;
 }
 
 export function partHref(part) {

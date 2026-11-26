@@ -3,7 +3,7 @@ import * as db from '../db.js';
 import { openPdfData, forgetPdf } from '../pdf.js';
 import { buildBackup, readBackup, restoreBackup } from '../backup.js';
 import { esc, icon, eul, toast, dialog, ask, sheet } from '../ui.js';
-import { rowsOf, partStatus, isText } from '../knitting.js';
+import { rowsOf, partStatus, isText , progressFrac } from '../knitting.js';
 import { APP_VERSION } from '../version.js';
 import { app, go, clamp, route, header } from '../core.js';
 import { partHref, currentPart } from '../partnav.js';
@@ -34,7 +34,7 @@ export async function viewHome() {
         const hi = isText(cur) ? cur.text.goal : rowsOf(cur).hi;
         const row = cur.progress?.row ?? lo;
         bits.push(hi && hi < 9999 ? `${row} / ${hi}단` : `${row}단`);
-        if (hi && hi < 9999) pct = Math.max(0, Math.min(100, ((row - lo) / (hi - lo + 1)) * 100));
+        if (hi && hi < 9999) pct = progressFrac(cur) * 100;
         center = `${row}단`; ringCls = String(row).length > 2 ? 'is-long' : '';
       }
       bits.push(`파트 ${done}/${parts.length}`);

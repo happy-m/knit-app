@@ -435,7 +435,7 @@ textarea.input.area { padding: 12px; min-height: 120px; line-height: 1.5; resize
 .tool-sheet .sheet-title { padding: 8px 0 0; }
 .tool-sheet .label { margin: 4px 0 0; }
 .tool-sheet .link-btn { align-self: flex-start; min-height: 32px; }
-.tool-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tool-tiles { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
 .tool-tile { border: 1px solid var(--line); background: var(--white); border-radius: 14px; padding: 14px 8px; font-size: 15px; font-weight: 700; color: var(--ink);
   display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .tool-tile span { font-size: 22px; line-height: 1; }
@@ -447,3 +447,21 @@ textarea.input.area { padding: 12px; min-height: 120px; line-height: 1.5; resize
 .tool-pin.on { border-color: var(--ink); }
 .tool-pin.off i { background: var(--white) !important; color: #A3A3A0; border: 1.5px dashed #BBBBB6; }
 .tp-S { background: #3E7CB1; } .tp-E { background: var(--mark); } .tp-M1, .tp-M2 { background: #5E8C61; font-size: 11px !important; }
+
+/* 반복 */
+.rc-rep b { font-weight: 800; }
+.rep-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; min-height: 52px; padding: 0 14px;
+  border: 1px solid var(--line); background: var(--white); border-radius: 14px; font-size: 15px; color: var(--ink); }
+.rep-item span { font-size: 13px; color: var(--sub); }
+.tool-sheet .rep-item, .tool-sheet .btn.dashed { margin-bottom: 8px; width: 100%; }
+.tool-sheet .label { margin: 10px 0 6px; }
+.rep-form { display: flex; flex-direction: column; gap: 12px; }
+.rep-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.rep-fields label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--sub); }
+.rep-fields .input { width: 100%; padding-right: 44px; }
+.rep-extra { min-height: 44px; }
+.cv-ov .rep-br { position: absolute; left: 1px; width: 8px; border: 2.5px solid var(--teal); border-right: 0; border-radius: 4px 0 0 4px; pointer-events: none; }
+.cv-ov .rep-tag { position: absolute; left: 12px; transform: translateY(-50%); background: var(--teal); color: #fff; font-size: 11px; font-weight: 800;
+  padding: 2px 6px; border-radius: 8px; pointer-events: none; }
+.ring-ov .rg-rep { fill: none; stroke: var(--teal); stroke-width: 2; stroke-dasharray: 6 4; }
+.ring-ov .rg-rep-t { fill: var(--teal); font-size: 12px; font-weight: 800; }

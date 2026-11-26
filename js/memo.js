@@ -78,7 +78,7 @@ export async function memoList(part, canJump, curRow = 1) {
 
 // 단 카드를 눌렀을 때: 단 이동 / 메모
 // 단 카드를 눌렀을 때 뜨는 도구 시트: 단 이동, 메모 입력, 핀 네 칸
-// 돌려주는 값: 'jump' | 'memo' | 'list' | 'pinS' | 'unpinS' … | undefined
+// 돌려주는 값: 'jump' | 'memo' | 'reps' | 'list' | 'pinS' | 'unpinS' … | undefined
 export function rowMenu(part, row) {
   return new Promise((resolve) => {
     const n = memosOf(part).length;
@@ -90,6 +90,7 @@ export function rowMenu(part, row) {
       <div class="tool-tiles">
         <button type="button" class="tool-tile" data-v="jump"><span aria-hidden="true">⇅</span>단 이동</button>
         <button type="button" class="tool-tile" data-v="memo"><span aria-hidden="true">✎</span>메모 입력</button>
+        <button type="button" class="tool-tile" data-v="reps"><span aria-hidden="true">↻</span>반복</button>
       </div>
       ${n ? `<button type="button" class="link-btn" data-v="list">메모 전체 보기 (${n}개)</button>` : ''}
       <div class="label">핀 · 누르고 도안을 탭하면 꽂힙니다</div>

@@ -4,7 +4,7 @@ import { loadPdf, pageSize } from '../pdf.js';
 import { ChartView } from '../chartview.js';
 import { StackView } from '../stackview.js';
 import { esc, icon, ro, toast, dialog, sheet } from '../ui.js';
-import { calibrated, rowsOf, colsOf, startProgress, knitIndex, isRightSide, repeatTotal, nextRow, prevRow, jumpTo, partStatus, isText, segsOf, segPart, segForRow, isCirc } from '../knitting.js';
+import { calibrated, rowsOf, colsOf, startProgress, isRightSide, repsOf, nextRow, prevRow, jumpTo, partStatus, isText, segsOf, segPart, segForRow, isCirc } from '../knitting.js';
 import { ringGeom, ringOnView, stadium } from '../circ.js';
 import { readSizeGroups } from '../sizes.js';
 import { app, go, clamp, onCleanup } from '../core.js';
@@ -15,6 +15,7 @@ import { toggleLegend } from '../legend.js';
 import { keypad, openDoc } from '../dialogs.js';
 import { videoMenu } from '../videoui.js';
 import { pinControl } from '../pins.js';
+import { repLines, repNote, repeatSheet } from '../reps.js';
 
 // ---- 세 가지 뜨기 화면이 함께 쓰는 것 ----
 
@@ -82,12 +83,13 @@ function bindKnitCommon({ proj, doc, parts, id }) {
 }
 
 // 단 카드: 누르면 도구 시트(단 이동·메모·핀)를 띄우고 고른 일을 한다. moveTo(r): 그 화면 방식대로 r단으로 옮기기
-function bindRowCard({ el, part, pins, range, restore, onMemoChanged, moveTo }) {
+function bindRowCard({ el, part, pins, range, save, restore, onMemoChanged, moveTo }) {
   el.addEventListener('click', async () => {
     const row = part.progress.row;
     const act = await rowMenu(part, row);
     if (await pins.handle(act)) return;
     if (act === 'memo') { if (await editMemo(part, row)) onMemoChanged(); return; }
+    if (act === 'reps') { if (await repeatSheet(part, save)) onMemoChanged(); return; }
     let r;
     if (act === 'list') r = await memoList(part, true, row);
     else if (act === 'jump') r = await keypad(range, row);
@@ -147,6 +149,15 @@ export async function viewCircKnit(part) {
       paths += `<path d="${outer}" class="rg-line"/>`;
       if (inner) paths += `<path d="${inner}" class="rg-line"/>`;
     }
+    // 구간 반복: 안팎 테두리를 점선으로, 오른쪽에 횟수
+    for (const rg of repsOf(part).ranges) {
+      if (rg.from > ring.n) continue;
+      const out = g.rpx(Math.min(rg.to, ring.n));
+      const inn = stadium(g.Apx, g.Bpx, g.rpx(rg.from - 1));
+      paths += `<path d="${stadium(g.Apx, g.Bpx, out)}" class="rg-rep"/>`;
+      if (inn) paths += `<path d="${inn}" class="rg-rep"/>`;
+      paths += `<text class="rg-rep-t" x="${g.Bpx[0] + out + 4}" y="${g.Bpx[1] - 6}">×${rg.times || '?'}</text>`;
+    }
     for (const m of memosOf(part)) {
       if (m.row < 1 || m.row > ring.n) continue;
       const [x, y] = [g.Bpx[0] + g.rpx(m.row - 0.5), g.Bpx[1]];
@@ -172,6 +183,7 @@ export async function viewCircKnit(part) {
       <span class="rc-num"><span class="num rc-big">${pr.row}</span><span class="rc-u">단</span><span class="num muted">/ ${ring.n}</span></span>
       <span class="bar"><i style="width:${pct}%"></i></span>
       <span class="rc-line small muted">${pr.done ? `${esc(part.name)} 완료` : pr.row > 1 ? `${pr.row - 1}단까지 떴습니다` : '첫 단을 뜨는 중'}</span>
+      ${repLines(part, pr)}
       ${memoHint(part, pr)}`;
     showMemo(pr);
     nextBtn.disabled = !!pr.done;
@@ -212,6 +224,7 @@ export async function viewCircKnit(part) {
     await save();
     refresh(true);
     if (res === 'finished' && nextPart) await offerNextPart(part, nextPart, '마지막 단까지 떴습니다.');
+    else if (repNote(part, res)) toast(repNote(part, res), { ms: 1800 });
   });
   app.querySelector('#prev').addEventListener('click', async () => {
     if (!prevRow(part)) { toast('첫 단입니다'); return; }
@@ -220,7 +233,7 @@ export async function viewCircKnit(part) {
     refresh(true);
   });
   bindRowCard({
-    el: rowcard, part, pins, range: R, restore,
+    el: rowcard, part, pins, range: R, save, restore,
     onMemoChanged: () => refresh(),
     moveTo: async (r) => {
       jumpTo(part, r);
@@ -294,6 +307,16 @@ export async function viewKnit(id) {
         h += `<span class="mark-tag" style="left:${(x1 + x2) / 2}px;top:${y1}px">${pr.mark}번 칸</span>`;
       }
     }
+    // 구간 반복: 왼쪽에 꺾쇠와 횟수 (이 쪽에 걸친 부분만)
+    for (const rg of repsOf(part).ranges) {
+      const a = Math.max(rg.from, R.lo);
+      const b = Math.min(rg.to, R.hi);
+      if (a > b) continue;
+      const ys = [...edge(a), ...edge(b)].map((n) => v.n2p(0, n)[1]);
+      const y1 = Math.min(...ys);
+      const y2 = Math.max(...ys);
+      h += `<i class="rep-br" style="top:${y1}px;height:${y2 - y1}px"></i><span class="rep-tag" style="top:${(y1 + y2) / 2}px">×${rg.times || '?'}</span>`;
+    }
     // 메모가 있는 단은 왼쪽에 ✎ 표시
     for (const m of memosOf(part)) {
       if (m.row < R.lo || m.row > R.hi) continue;
@@ -312,7 +335,6 @@ export async function viewKnit(id) {
 
   const refresh = (follow) => {
     const pr = p();
-    const total = repeatTotal(part);
     const rs = isRightSide(part);
     const round = part.cal.mode.type === 'round';
     dirEl.innerHTML = pr.done ? `${icon.check}완료`
@@ -322,7 +344,7 @@ export async function viewKnit(id) {
       ${pr.done ? `<span class="tag-done">${icon.check}${esc(part.name)} 완료</span>`
         : pr.mark !== null && pr.mark !== undefined ? `<span class="rc-line"><i class="mk"></i>코 표시 <b class="num">${pr.mark}</b>번 칸</span>`
         : '<span class="rc-line muted">코 표시 없음</span>'}
-      ${total !== null ? `<span class="rc-line small">반복 <b class="num">${pr.rep}/${total || '∞'}</b>회차 · 처음부터 <b class="num">${knitIndex(part) + 1}</b>단째</span>` : ''}
+      ${repLines(part, pr)}
       ${memoHint(part, pr)}`;
     showMemo(pr);
     nextBtn.disabled = !!pr.done;
@@ -433,7 +455,7 @@ export async function viewKnit(id) {
       if (nextPart) await offerNextPart(part, nextPart, '마지막 단까지 떴습니다.');
     } else {
       // 평소에는 알림 없이 넘어간다 (되돌리기는 '이전 단'). 반복이 새로 시작되거나 페이지가 바뀔 때만 짧게 알린다
-      const note = [res === 'repeat' ? `반복 <b>${part.progress.rep}회차</b> 시작` : '', moved ? `<b>${moved}쪽</b> 차트로 넘어왔어요` : ''].filter(Boolean).join(' · ');
+      const note = [repNote(part, res), moved ? `<b>${moved}쪽</b> 차트로 넘어왔어요` : ''].filter(Boolean).join(' · ');
       if (note) toast(note, { ms: 1800 });
     }
   });
@@ -446,7 +468,7 @@ export async function viewKnit(id) {
     if (moved) toast(`<b>${moved}쪽</b> 차트로 돌아왔어요`);
   });
   bindRowCard({
-    el: rowcard, part, pins, range: RR, restore,
+    el: rowcard, part, pins, range: RR, save, restore,
     onMemoChanged: () => refresh(false),
     moveTo: async (r) => {
       jumpTo(part, r);
@@ -526,6 +548,7 @@ export async function viewTextKnit(part) {
       <span class="rc-num"><span class="num rc-big">${pr.row}</span><span class="rc-u">단</span>${goal ? `<span class="num muted">/ ${goal}</span>` : ''}</span>
       ${goal ? `<span class="bar"><i style="width:${pct}%"></i></span>` : ''}
       <span class="rc-line small muted">${pr.done ? `${esc(part.name)} 완료` : `${pr.row > 1 ? `${pr.row - 1}단까지 떴습니다` : '첫 단을 뜨는 중'}${goal ? ` · 목표까지 ${Math.max(0, goal - pr.row + 1)}단` : ''}`}</span>
+      ${repLines(part, pr)}
       ${memoHint(part, pr)}`;
     showMemo(pr);
     nextBtn.disabled = !!pr.done;
@@ -586,31 +609,21 @@ export async function viewTextKnit(part) {
   refresh();
 
   nextBtn.addEventListener('click', async () => {
-    const pr = p();
-    if (goal && pr.row >= goal) {
-      pr.done = true;
-      await save();
-      refresh();
-      if (nextPart) await offerNextPart(part, nextPart, '목표 단수까지 떴습니다.');
-      return;
-    }
-    pr.row += 1;
-    pr.touched = true;
+    const res = nextRow(part);
+    p().touched = true;
     await save();
     refresh();
-
+    if (res === 'finished' && nextPart) await offerNextPart(part, nextPart, '목표 단수까지 떴습니다.');
+    else if (repNote(part, res)) toast(repNote(part, res), { ms: 1800 });
   });
   app.querySelector('#prev').addEventListener('click', async () => {
-    const pr = p();
-    if (pr.done) pr.done = false;
-    else if (pr.row > 1) pr.row -= 1;
-    else { toast('첫 단입니다'); return; }
-    pr.touched = true;
+    if (!prevRow(part)) { toast('첫 단입니다'); return; }
+    p().touched = true;
     await save();
     refresh();
   });
   bindRowCard({
-    el: rowcard, part, pins, range: R, restore,
+    el: rowcard, part, pins, range: R, save, restore,
     onMemoChanged: () => refresh(),
     moveTo: async (r) => {
       p().row = r;
