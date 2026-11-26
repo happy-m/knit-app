@@ -2,7 +2,7 @@
 // 계산은 knitting.js에 있다 (repsOf, nextRow …)
 import { uid } from './db.js';
 import { esc, toast } from './ui.js';
-import { repsOf, boundsOf, activeRange, wholeRepeat, knitIndex, rangeProblem, endRange } from './knitting.js';
+import { repsOf, activeRange, wholeRepeat, knitIndex, rangeProblem, endRange } from './knitting.js';
 
 const layer = () => document.getElementById('layer');
 const num = (el) => { const v = parseInt((el.value || '').replace(/\D/g, ''), 10); return Number.isInteger(v) ? v : null; };
@@ -59,9 +59,10 @@ function form(title, hint, fields, extra = []) {
     el.innerHTML = `<form class="dialog rep-form" role="dialog" aria-modal="true">
       <div class="dialog-title">${esc(title)}</div>
       ${hint ? `<p class="small muted">${hint}</p>` : ''}
+      ${extra.filter((x) => x.top).map((x) => `<button type="button" class="btn rep-extra rep-pick" data-extra="${x.value}">${x.label}</button>`).join('')}
       <div class="rep-fields">${fields.map((f) => `<label><span>${f.label}</span>
         <span class="suffix"><input class="input num" data-k="${f.key}" inputmode="numeric" pattern="[0-9]*" value="${f.value ?? ''}" placeholder="${f.optional ? '미정' : ''}"><span>${f.unit}</span></span></label>`).join('')}</div>
-      ${extra.map((x) => `<button type="button" class="btn${x.danger ? ' danger' : ''} rep-extra" data-extra="${x.value}">${x.label}</button>`).join('')}
+      ${extra.filter((x) => !x.top).map((x) => `<button type="button" class="btn${x.danger ? ' danger' : ''} rep-extra" data-extra="${x.value}">${x.label}</button>`).join('')}
       <div class="dialog-btns"><button type="button" class="btn" data-x>취소</button><button class="btn primary">저장</button></div></form>`;
     const done = (v) => { el.remove(); resolve(v); };
     el.querySelector('form').addEventListener('submit', (e) => {
@@ -73,7 +74,8 @@ function form(title, hint, fields, extra = []) {
     el.querySelector('[data-x]').addEventListener('click', () => done(null));
     el.querySelectorAll('[data-extra]').forEach((b) => b.addEventListener('click', () => done({ extra: b.dataset.extra })));
     layer().appendChild(el);
-    setTimeout(() => el.querySelector('input')?.focus(), 50);
+    // 도안에서 고르는 버튼이 있으면 자판을 바로 띄우지 않는다 (자판이 버튼을 가린다)
+    if (!extra.some((x) => x.top)) setTimeout(() => el.querySelector('input')?.focus(), 50);
   });
 }
 
@@ -113,8 +115,13 @@ function pickRows() {
   });
 }
 
-async function editRange(part, g, pre) {
+async function editRange(part, g, pre, viaPick) {
   const isNew = !g;
+  if (viaPick) {
+    const got = await pickRows();
+    if (!got) return false;
+    return editRange(part, g, got);
+  }
   const p = part.progress;
   const cur = g && activeRange(part, p)?.range === g ? activeRange(part, p).iter : null;
   const r = await form(isNew ? '구간 반복 추가' : `${g.from}~${g.to}단 반복`,
@@ -124,7 +131,7 @@ async function editRange(part, g, pre) {
       { key: 'times', label: '횟수', value: g?.times ?? '', unit: '회', optional: true },
       ...(cur ? [{ key: 'iter', label: '지금', value: cur, unit: '회차' }] : []),
     ], [
-      ...(part.kind === 'text' ? [] : [{ label: '도안에서 시작·끝 단 고르기', value: 'pick' }]),
+      { label: '도안에서 시작·끝 단 고르기', value: 'pick', top: true },
       ...(isNew ? [] : [
       ...(cur && !g.times ? [{ label: '이 반복 끝내고 다음 단으로', value: 'end' }] : []),
       { label: '이 반복 지우기', value: 'del', danger: true }]),
@@ -155,15 +162,21 @@ async function editRange(part, g, pre) {
 async function editWhole(part) {
   const reps = repsOf(part);
   const p = part.progress;
-  const { hi } = boundsOf(part);
-  if (!Number.isFinite(hi)) { toast('전체 반복은 목표 단수가 있어야 쓸 수 있어요. 파트에서 목표 단수를 먼저 적어주세요.'); return false; }
+  const isText = part.kind === 'text';
   const w = reps.whole;
   const r = await form('전체 반복', '차트(또는 설명) 전체를 여러 번 뜹니다. 모티브처럼 같은 것을 여러 장 뜰 때 쓰세요. 개수를 비우면 직접 끝낼 때까지 셉니다.', [
+    ...(isText ? [{ key: 'goal', label: '한 번에 몇 단', value: part.text?.goal ?? '', unit: '단' }] : []),
     { key: 'times', label: '몇 개', value: w?.times ?? '', unit: '개', optional: true },
     ...(w ? [{ key: 'now', label: '지금', value: p.rep || 1, unit: '번째' }] : []),
   ], w ? [{ label: '전체 반복 끄기', value: 'del', danger: true }] : []);
   if (!r) return false;
   if (r.extra === 'del') { reps.whole = null; p.rep = 1; return true; }
+  if (isText) {
+    // 글 도안은 한 번이 몇 단인지 알아야 처음으로 돌아갈 수 있다
+    if (!r.goal || r.goal < 1) { toast('한 번에 몇 단인지 적어주세요.'); return editWhole(part); }
+    if (r.goal < p.row) { toast(`지금 ${p.row}단을 뜨는 중이라 그보다 작게는 못 정해요.`); return editWhole(part); }
+    (part.text ||= {}).goal = r.goal;
+  }
   reps.whole = { times: r.times && r.times > 1 ? r.times : null };
   if (r.now) p.rep = Math.max(1, reps.whole.times ? Math.min(r.now, reps.whole.times) : r.now);
   return true;
@@ -186,7 +199,7 @@ export function repeatSheet(part, save) {
         ${reps.ranges.map((g, i) => `<button type="button" class="rep-item" data-range="${i}">
           <b>${g.from}~${g.to}단 × ${timesTxt(g.times, '회')}</b>
           <span>${act?.range === g ? `지금 ${act.iter}회차` : '고치기'}</span></button>`).join('')}
-        <button type="button" class="btn dashed" data-add>+ 구간 반복 추가</button>
+        <div class="rep-add"><button type="button" class="btn dashed" data-addpick>+ 도안에서 고르기</button><button type="button" class="btn dashed" data-add>+ 단 번호 입력</button></div>
         <div class="label">전체 반복 · 차트 전체를 여러 번 (모티브 등)</div>
         <button type="button" class="${w ? 'rep-item' : 'btn dashed'}" data-whole>${w
           ? `<b>전체 × ${timesTxt(w.times, '개')}</b><span>지금 ${w.now}번째</span>` : '+ 전체 반복 켜기'}</button>
@@ -201,6 +214,7 @@ export function repeatSheet(part, save) {
     el.addEventListener('click', (e) => {
       const rg = e.target.closest('[data-range]');
       if (rg) return run(() => editRange(part, repsOf(part).ranges[+rg.dataset.range]));
+      if (e.target.closest('[data-addpick]')) return run(() => editRange(part, null, null, true));
       if (e.target.closest('[data-add]')) return run(() => editRange(part, null));
       if (e.target.closest('[data-whole]')) return run(() => editWhole(part));
       if (e.target.closest('[data-x]') || e.target === el) { el.remove(); resolve(changed); }

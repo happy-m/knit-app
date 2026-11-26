@@ -202,7 +202,7 @@ export async function readTextLines(page, area) {
       const bot = Math.max(y1, y2) / vp.height;
       const cx = x1 / vp.width;
       if (cx < area.x || cx > area.x + area.w || bot < area.y || top > area.y + area.h) continue;
-      boxes.push({ top, bot, c: (top + bot) / 2 });
+      boxes.push({ top, bot, c: (top + bot) / 2, bits: [[cx, it.str]] });
     }
     boxes.sort((p, q) => p.c - q.c);
     const lines = [];
@@ -211,7 +211,14 @@ export async function readTextLines(page, area) {
       if (L && Math.abs(bx.c - L.c) < (L.bot - L.top) * 0.5) {
         L.top = Math.min(L.top, bx.top);
         L.bot = Math.max(L.bot, bx.bot);
+        L.bits.push(...bx.bits);
       } else lines.push({ ...bx });
+    }
+    // 줄 맨 앞이 "5단…"처럼 시작하면 그 단 번호를 붙여 둔다 (도안에서 단을 고를 때 쓴다)
+    for (const L of lines) {
+      const m = /^\s*(\d{1,4})\s*단/.exec(L.bits.sort((p, q) => p[0] - q[0]).map((t) => t[1]).join(''));
+      L.row = m ? +m[1] : null;
+      delete L.bits;
     }
     return lines;
   } catch {

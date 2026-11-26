@@ -506,8 +506,7 @@ export async function viewTextKnit(part) {
   const doc = await loadPdf(proj.fileId);
   if (!part.progress) part.progress = { row: 1, line: null, done: false };
   const p = () => part.progress;
-  const goal = part.text.goal;
-  const R = { lo: 1, hi: goal || 9999 };
+  const R = { lo: 1, get hi() { return part.text.goal || 9999; } };
   const idx = parts.findIndex((x) => x.id === id);
   const nextPart = parts[idx + 1];
   proj.lastPartId = id;
@@ -560,6 +559,7 @@ export async function viewTextKnit(part) {
   const nextBtn = app.querySelector('#next');
   const refresh = () => {
     const pr = p();
+    const goal = part.text.goal;
     const pct = goal ? Math.min(100, ((pr.done ? goal : pr.row - 1) / goal) * 100) : 0;
     rowcard.innerHTML = `<span class="rc-top"><span>${pr.done ? '완료' : '지금 뜨는 단'}</span><span class="rc-jump">${icon.edit}이동·핀</span></span>
       <span class="rc-num"><span class="num rc-big">${pr.row}</span><span class="rc-u">단</span>${goal ? `<span class="num muted">/ ${goal}</span>` : ''}</span>
@@ -582,6 +582,12 @@ export async function viewTextKnit(part) {
     onTap: async (i, nx, ny) => {
       if (pins.armed()) return pins.place({ seg: i, x: nx, y: ny, label: `${segs[i].page}쪽` });
       const lines = (await linesP)[i] || [];
+      if (rowPick.armed()) {
+        // "5단: …"처럼 단 번호로 시작하는 줄을 탭하면 그 번호를 고른다
+        const hit = lines.find((l) => ny >= l.top - 0.004 && ny <= l.bot + 0.004);
+        if (hit?.row) return rowPick.tap(hit.row);
+        return toast("단 번호로 시작하는 줄(예: '5단: …')을 탭해 주세요. 안 되면 취소하고 번호로 입력하세요.");
+      }
       let L = null;
       if (lines.length) {
         let bd = Infinity;
