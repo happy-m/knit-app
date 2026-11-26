@@ -8,17 +8,24 @@ const layer = () => document.getElementById('layer');
 const num = (el) => { const v = parseInt((el.value || '').replace(/\D/g, ''), 10); return Number.isInteger(v) ? v : null; };
 const timesTxt = (t, unit) => (t ? `${t}${unit}` : '횟수 미정');
 
-// 단 카드에 넣는 줄: "반복 2/6회차 (5~12단)", "3번째 / 12개", "처음부터 47단째"
+// 단 카드에 넣는 줄: "처음부터 47단째" (반복이 있을 때만)
 export function repLines(part, pr) {
+  const reps = repsOf(part);
+  if ((!reps.ranges.length && !reps.whole) || pr.done) return '';
+  return `<span class="rc-line small rc-rep muted">처음부터 <b class="num">${knitIndex(part, pr) + 1}</b>단째</span>`;
+}
+
+// 단 카드 아래 반복 띠에 넣는 말: "3~6단 반복 · 9회차", "전체 반복 · 2번째 / 12개". 반복이 없으면 ''
+export function repBarText(part, pr) {
   const reps = repsOf(part);
   if (!reps.ranges.length && !reps.whole) return '';
   const out = [];
   const a = pr.done ? null : activeRange(part, pr);
-  if (a) out.push(`반복 <b class="num">${a.iter}${a.range.times ? `/${a.range.times}` : ''}</b>회차 <span class="muted">(${a.range.from}~${a.range.to}단)</span>`);
+  if (a) out.push(`${a.range.from}~${a.range.to}단 반복 · <b class="num">${a.iter}${a.range.times ? `/${a.range.times}` : ''}회차</b>`);
   const w = wholeRepeat(part, pr);
-  if (w) out.push(`<b class="num">${w.now}</b>번째${w.times ? ` <span class="muted">/ ${w.times}개</span>` : ''}`);
-  if (!pr.done) out.push(`<span class="muted">처음부터 <b class="num">${knitIndex(part, pr) + 1}</b>단째</span>`);
-  return out.map((t) => `<span class="rc-line small rc-rep">${t}</span>`).join('');
+  if (w) out.push(`${a ? '' : '전체 반복 · '}<b class="num">${w.now}번째</b>${w.times ? ` / ${w.times}개` : ''}`);
+  if (!out.length) out.push(`구간 반복 ${reps.ranges.map((g) => `${g.from}~${g.to}단`).join(', ')}`);
+  return `<span aria-hidden="true">↻</span> ${out.join(' · ')}`;
 }
 
 // '다음 단' 결과에 따라 짧게 알릴 말. 알릴 게 없으면 ''

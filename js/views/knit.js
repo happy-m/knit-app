@@ -15,7 +15,7 @@ import { toggleLegend } from '../legend.js';
 import { keypad, openDoc } from '../dialogs.js';
 import { videoMenu } from '../videoui.js';
 import { pinControl } from '../pins.js';
-import { repLines, repNote, repeatSheet, rowPick } from '../reps.js';
+import { repLines, repBarText, repNote, repeatSheet, rowPick } from '../reps.js';
 
 // ---- 세 가지 뜨기 화면이 함께 쓰는 것 ----
 
@@ -41,7 +41,11 @@ function knitShell({ proj, part, parts, idx, cls = '', top = '', beforeChart = '
     <div class="k-ctrl">
       <button type="button" class="row-card" id="rowcard" aria-label="단 번호를 입력해 이동"></button>
       <button type="button" class="next-btn" id="next">다음 단</button>
-      <button type="button" class="btn prev-btn" id="prev">${icon.undo}이전 단</button>
+      <div class="k-sub">
+        <button type="button" class="btn prev-btn" id="prev" aria-label="이전 단">${icon.undo}</button>
+        <button type="button" class="btn memo-btn" id="memobtn" aria-label="메모 입력">${icon.edit}</button>
+      </div>
+      <button type="button" class="rep-bar" id="repbar" hidden></button>
     </div></div>`;
 }
 
@@ -82,8 +86,18 @@ function bindKnitCommon({ proj, doc, parts, id }) {
   onCleanup(() => { document.removeEventListener('visibilitychange', vis); lock?.release?.().catch(() => {}); });
 }
 
+// 반복 띠(단 카드 아래)를 지금 상태로 고치고, 단 카드에 넣을 줄을 돌려준다
+function repInfo(part, pr) {
+  const bar = app.querySelector('#repbar');
+  const t = repBarText(part, pr);
+  if (bar) { bar.hidden = !t; bar.innerHTML = t; }
+  return repLines(part, pr);
+}
+
 // 단 카드: 누르면 도구 시트(단 이동·메모·핀)를 띄우고 고른 일을 한다. moveTo(r): 그 화면 방식대로 r단으로 옮기기
 function bindRowCard({ el, part, pins, range, save, restore, onMemoChanged, moveTo }) {
+  app.querySelector('#memobtn').addEventListener('click', async () => { if (await editMemo(part, part.progress.row)) onMemoChanged(); });
+  app.querySelector('#repbar').addEventListener('click', async () => { if (await repeatSheet(part, save)) onMemoChanged(); });
   el.addEventListener('click', async () => {
     const row = part.progress.row;
     const act = await rowMenu(part, row);
@@ -178,11 +192,11 @@ export async function viewCircKnit(part) {
   const refresh = (scroll) => {
     const pr = p();
     const pct = Math.min(100, ((pr.done ? ring.n : pr.row - 1) / ring.n) * 100);
-    rowcard.innerHTML = `<span class="rc-top"><span>${pr.done ? '완료' : '지금 뜨는 단'}</span><span class="rc-jump">${icon.edit}이동·메모</span></span>
+    rowcard.innerHTML = `<span class="rc-top"><span>${pr.done ? '완료' : '지금 뜨는 단'}</span><span class="rc-jump">${icon.edit}이동·핀</span></span>
       <span class="rc-num"><span class="num rc-big">${pr.row}</span><span class="rc-u">단</span><span class="num muted">/ ${ring.n}</span></span>
       <span class="bar"><i style="width:${pct}%"></i></span>
       <span class="rc-line small muted">${pr.done ? `${esc(part.name)} 완료` : pr.row > 1 ? `${pr.row - 1}단까지 떴습니다` : '첫 단을 뜨는 중'}</span>
-      ${repLines(part, pr)}
+      ${repInfo(part, pr)}
       ${memoHint(part, pr)}`;
     showMemo(pr);
     nextBtn.disabled = !!pr.done;
@@ -340,12 +354,12 @@ export async function viewKnit(id) {
     const round = part.cal.mode.type === 'round';
     dirEl.innerHTML = pr.done ? `${icon.check}완료`
       : `${rs ? icon.left : icon.right}${round ? '원통' : rs ? '겉면' : '안면'}<span class="dir-long"> · ${rs ? '왼쪽' : '오른쪽'}으로 읽기</span>`;
-    rowcard.innerHTML = `<span class="rc-top"><span>${pr.done ? '완료' : '지금'}</span><span class="rc-jump">${icon.edit}이동·메모</span></span>
+    rowcard.innerHTML = `<span class="rc-top"><span>${pr.done ? '완료' : '지금'}</span><span class="rc-jump">${icon.edit}이동·핀</span></span>
       <span class="rc-num"><span class="num rc-big">${pr.row}</span><span class="rc-u">단</span><span class="num muted">/ ${RR.hi}</span></span>
       ${pr.done ? `<span class="tag-done">${icon.check}${esc(part.name)} 완료</span>`
         : pr.mark !== null && pr.mark !== undefined ? `<span class="rc-line"><i class="mk"></i>코 표시 <b class="num">${pr.mark}</b>번 칸</span>`
         : '<span class="rc-line muted">코 표시 없음</span>'}
-      ${repLines(part, pr)}
+      ${repInfo(part, pr)}
       ${memoHint(part, pr)}`;
     showMemo(pr);
     nextBtn.disabled = !!pr.done;
@@ -547,11 +561,11 @@ export async function viewTextKnit(part) {
   const refresh = () => {
     const pr = p();
     const pct = goal ? Math.min(100, ((pr.done ? goal : pr.row - 1) / goal) * 100) : 0;
-    rowcard.innerHTML = `<span class="rc-top"><span>${pr.done ? '완료' : '지금 뜨는 단'}</span><span class="rc-jump">${icon.edit}이동·메모</span></span>
+    rowcard.innerHTML = `<span class="rc-top"><span>${pr.done ? '완료' : '지금 뜨는 단'}</span><span class="rc-jump">${icon.edit}이동·핀</span></span>
       <span class="rc-num"><span class="num rc-big">${pr.row}</span><span class="rc-u">단</span>${goal ? `<span class="num muted">/ ${goal}</span>` : ''}</span>
       ${goal ? `<span class="bar"><i style="width:${pct}%"></i></span>` : ''}
       <span class="rc-line small muted">${pr.done ? `${esc(part.name)} 완료` : `${pr.row > 1 ? `${pr.row - 1}단까지 떴습니다` : '첫 단을 뜨는 중'}${goal ? ` · 목표까지 ${Math.max(0, goal - pr.row + 1)}단` : ''}`}</span>
-      ${repLines(part, pr)}
+      ${repInfo(part, pr)}
       ${memoHint(part, pr)}`;
     showMemo(pr);
     nextBtn.disabled = !!pr.done;

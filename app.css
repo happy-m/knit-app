@@ -192,8 +192,8 @@ a { color: var(--ink); }
 .dir-chip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: 16px; background: var(--white);
   border: 1px solid var(--line); font-size: 13px; font-weight: 600; white-space: nowrap; }
 .k-chart { position: relative; flex: 1; min-height: 0; margin: 0 12px 12px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--white); }
-.k-ctrl { display: grid; grid-template-columns: 1fr 1.2fr; grid-template-rows: auto auto; gap: 8px 10px; padding: 0 12px calc(12px + var(--sab)); }
-.row-card { grid-column: 1; grid-row: 1; background: var(--white); border: 1px solid var(--ink); border-radius: 12px; padding: 10px 12px;
+.k-ctrl { display: grid; grid-template-columns: 1.2fr 1fr; grid-template-rows: 1fr auto; gap: 8px 10px; padding: 0 12px calc(12px + var(--sab)); }
+.row-card { grid-column: 1; grid-row: 1 / span 2; background: var(--white); border: 1px solid var(--ink); border-radius: 12px; padding: 10px 12px;
   display: flex; flex-direction: column; gap: 3px; text-align: left; color: var(--ink); }
 .rc-top { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--sub); }
 .rc-jump { display: inline-flex; align-items: center; gap: 3px; color: var(--ink); font-weight: 600; }
@@ -202,10 +202,15 @@ a { color: var(--ink); }
 .rc-u { font-size: 14px; font-weight: 600; }
 .rc-line { font-size: 13px; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .mk { display: inline-block; width: 10px; height: 10px; border: 2px solid var(--mark); border-radius: 2px; }
-.next-btn { grid-column: 2; grid-row: 1 / span 2; min-height: 120px; border: 0; border-radius: 16px; background: var(--btn); color: #fff;
+.next-btn { grid-column: 2; grid-row: 1; min-height: 60px; border: 0; border-radius: 16px; background: var(--btn); color: #fff;
   font-size: 24px; font-weight: 700; }
 .next-btn:disabled { background: var(--sub); }
-.prev-btn { grid-column: 1; grid-row: 2; }
+.k-sub { grid-column: 2; grid-row: 2; display: flex; gap: 8px; }
+.k-sub .btn { flex: 1; min-height: 46px; padding: 0; }
+.k-sub .btn svg { width: 20px; height: 20px; }
+.rep-bar { grid-column: 1 / span 2; grid-row: 3; min-height: 40px; border: 1px solid var(--teal); background: #F3EEEA; color: var(--teal); border-radius: 12px;
+  font-size: 14px; font-weight: 600; padding: 0 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rep-bar b { font-weight: 800; }
 
 @media (orientation: landscape) and (max-height: 600px) {
   .knit { flex-direction: row; }
