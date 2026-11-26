@@ -43,7 +43,7 @@ function knitShell({ proj, part, parts, idx, cls = '', top = '', beforeChart = '
       <button type="button" class="next-btn" id="next">다음 단</button>
       <div class="k-sub">
         <button type="button" class="btn prev-btn" id="prev" aria-label="이전 단">${icon.undo}</button>
-        <button type="button" class="btn memo-btn" id="memobtn" aria-label="메모 입력">${icon.edit}</button>
+        <button type="button" class="btn memo-btn" id="memobtn" aria-label="메모 입력">${icon.memo}</button>
       </div>
       <button type="button" class="rep-bar" id="repbar" hidden></button>
     </div></div>`;

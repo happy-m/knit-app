@@ -13,6 +13,7 @@ export const icon = {
   right: svg('<path d="M4 12h16M14 6l6 6-6 6"/>', 18, 2.4),
   check: svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 16, 2.6),
   chev: svg('<path d="M6 9l6 6 6-6"/>', 16, 2.4),
+  memo: svg('<path d="M12 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.4 2.6a2.1 2.1 0 013 3L12 15l-4 1 1-4z"/>', 18),
   edit: svg('<path d="M4 20h4L19 9l-4-4L4 16v4z"/>', 14, 2.2),
   more: svg('<circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/>', 20, 2),
   file: svg('<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/>', 22),
