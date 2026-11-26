@@ -214,10 +214,14 @@ export async function readTextLines(page, area) {
         L.bits.push(...bx.bits);
       } else lines.push({ ...bx });
     }
-    // 줄 맨 앞이 "5단…"처럼 시작하면 그 단 번호를 붙여 둔다 (도안에서 단을 고를 때 쓴다)
+    // 줄 맨 앞이 "5단…"처럼 시작하면 그 단 번호를 붙여 둔다 (도안에서 단을 고르거나, 단이 바뀔 때 형광펜을 옮길 때 쓴다)
+    // "2-3단(겉면): …"처럼 여러 단을 묶은 줄은 rowTo까지. "4-5단을 6번 반복" 같은 설명 줄은 묶음으로 치지 않는다
     for (const L of lines) {
-      const m = /^\s*(\d{1,4})\s*단/.exec(L.bits.sort((p, q) => p[0] - q[0]).map((t) => t[1]).join(''));
-      L.row = m ? +m[1] : null;
+      const t = L.bits.sort((p, q) => p[0] - q[0]).map((b) => b[1]).join('');
+      const g = /^\s*(\d{1,4})\s*[-~∼–]\s*(\d{1,4})\s*단\s*[(:：]/.exec(t);
+      const m = /^\s*(\d{1,4})\s*단/.exec(t);
+      L.row = g ? +g[1] : m ? +m[1] : null;
+      L.rowTo = g && +g[2] > +g[1] ? +g[2] : L.row;
       delete L.bits;
     }
     return lines;

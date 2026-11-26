@@ -16,7 +16,7 @@ export async function viewTextKnit(part) {
   if (!part.progress) part.progress = { row: 1, line: null, done: false };
   const p = () => part.progress;
   const R = { lo: 1, get hi() { return part.text.goal || 9999; } };
-  app.innerHTML = knitShell(ctx, part, { cls: 'text-knit', top: `${proj.sizes ? `<button type="button" class="sz-chip" id="szchip" aria-pressed="true">사이즈 ${esc(proj.sizes.labels?.[proj.sizes.idx] ?? proj.sizes.idx + 1)}</button>` : ''}`, afterChart: `<p class="hint pad k-hint">읽고 있는 줄을 탭하면 형광펜 띠가 옮겨갑니다.</p>` });
+  app.innerHTML = knitShell(ctx, part, { cls: 'text-knit', top: `${proj.sizes ? `<button type="button" class="sz-chip" id="szchip" aria-pressed="true">사이즈 ${esc(proj.sizes.labels?.[proj.sizes.idx] ?? proj.sizes.idx + 1)}</button>` : ''}`, afterChart: `<p class="hint pad k-hint">읽는 줄을 탭하면 형광펜이 옮겨가고, 그 단의 줄로 기억합니다.</p>` });
 
   // 내 사이즈 숫자 강조 (작품에 사이즈를 정해 두었을 때)
   const SZ = proj.sizes;
@@ -53,15 +53,54 @@ export async function viewTextKnit(part) {
       `<i class="ruler-dim" style="left:0;top:${y2}px;width:${w}px;height:${Math.max(0, ht - y2)}px"></i>` +
       `<i class="ruler-line" style="left:0;top:${y1}px;width:${w}px;height:${y2 - y1}px"></i>` + h;
   };
+  // 단이 바뀌면 읽는 줄도 따라간다.
+  //   1) 그 단에서 직접 탭해 둔 줄 (part.text.lineAt) — 반복으로 같은 단에 돌아왔을 때 같은 줄을 비추려고 기억한다
+  //   2) "5단: …"처럼 그 단 번호로 시작하는 줄. 같은 번호가 여러 군데면, 단 번호가 줄면(이전 단·반복 처음으로) 지금 줄보다 위쪽,
+  //      늘면 아래쪽에서 가장 가까운 것
+  //   3) 둘 다 없으면 그대로 둔다
+  const at = (seg, top) => seg * 10 + top;
+  const lineFor = async (row, back) => {
+    const mine = part.text.lineAt?.[row];
+    if (mine) return mine;
+    const all = linesP ? await linesP : [];
+    const cur = p().line;
+    const ck = cur ? at(cur.seg ?? 0, cur.top) : back ? Infinity : -1;
+    let best = null;
+    let bd = Infinity;
+    all.forEach((ls, i) => ls.forEach((l) => {
+      if (!l.row || row < l.row || row > l.rowTo) return;
+      const k = at(i, l.top);
+      const wrongSide = back ? k > ck + 0.001 : k < ck - 0.001;
+      const d = (l.rowTo - l.row) * 1000 + (wrongSide ? 100 : 0) + Math.abs(k - ck);
+      if (d < bd) { bd = d; best = { seg: i, top: l.top, bot: l.bot }; }
+    }));
+    return best;
+  };
+  let lastRow = p().row;
+  const sync = async () => {
+    const back = p().row < lastRow;
+    lastRow = p().row;
+    if (p().done) return null;
+    const L = await lineFor(p().row, back);
+    const cur = p().line;
+    if (!L || (cur && (cur.seg ?? 0) === L.seg && Math.abs(cur.top - L.top) < 0.002)) return null;
+    p().line = { ...L };
+    await ctl.save();
+    return { how: 'line' };
+  };
+  const followLine = () => {
+    const L = p().line;
+    if (L) cv.scrollTo(L.seg ?? 0, segs[L.seg ?? 0].area.x, L.top, { x: 'keep', yFrac: 0.35 });
+  };
   const ctl = knitControls({
-    ctx, part, range: R, total: () => part.text.goal, finished: '목표 단수까지 떴습니다.',
+    ctx, part, range: R, total: () => part.text.goal, finished: '목표 단수까지 떴습니다.', sync,
     lines: (pr) => {
       const goal = part.text.goal;
       const pct = goal ? Math.min(100, ((pr.done ? goal : pr.row - 1) / goal) * 100) : 0;
       return `${goal ? `<span class="bar"><i style="width:${pct}%"></i></span>` : ''}
       <span class="rc-line small muted">${pr.done ? `${esc(part.name)} 완료` : `${pr.row > 1 ? `${pr.row - 1}단까지 떴습니다` : '첫 단을 뜨는 중'}${goal ? ` · 목표까지 ${Math.max(0, goal - pr.row + 1)}단` : ''}`}</span>`;
     },
-    redraw: () => cv.redraw(),
+    redraw: (how) => { cv.redraw(); if (how === 'line') followLine(); },
   });
 
   const zKey = `knit.textScale.${id}`;
@@ -90,7 +129,11 @@ export async function viewTextKnit(part) {
       }
       if (!L) L = { top: ny - 0.008, bot: ny + 0.008 };
       const cur = p().line;
-      p().line = cur && (cur.seg ?? 0) === i && Math.abs(cur.top - L.top) < 0.002 ? null : { seg: i, top: L.top, bot: L.bot };
+      const off = cur && (cur.seg ?? 0) === i && Math.abs(cur.top - L.top) < 0.002;
+      p().line = off ? null : { seg: i, top: L.top, bot: L.bot };
+      // 이 단에서 읽는 줄로 기억한다 (반복으로 이 단에 다시 오면 이 줄로)
+      const at = (part.text.lineAt ||= {});
+      if (off) delete at[p().row]; else at[p().row] = { ...p().line };
       await ctl.save();
       ctl.refresh();
     },
@@ -117,6 +160,7 @@ export async function viewTextKnit(part) {
     const h = hs[Math.floor(hs.length / 2)];
     if (h) cv.setScale(Math.max(cv.s, 15 / (h * cv.pieces[0].H1)));
   }
+  if (!p().line) await sync();
   const L0 = p().line;
   const s0 = L0 ? clamp(L0.seg ?? 0, 0, segs.length - 1) : 0;
   cv.scrollTo(s0, segs[s0].area.x, L0 ? L0.top : segs[0].area.y, { x: 'start', yFrac: L0 ? 0.35 : 0 });
