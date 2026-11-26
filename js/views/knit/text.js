@@ -37,7 +37,7 @@ export async function viewTextKnit(part) {
     }
     return h;
   };
-  // 읽는 줄 강조: 줄 위아래를 흐리게 덮어 그 줄 글자만 또렷하게 보이게 한다 (글자 위에는 아무것도 안 덮음)
+  // 읽는 줄 강조: 위아래를 살짝 흐리게 덮고, 글자 아래에 글자 길이만큼 얇은 밑줄 (글자 위에는 아무것도 안 덮음)
   const decorate = (i, v) => {
     const L = p().line;
     const h = sizeMarks(i, v) + ctl.pins.html(i, v.n2p);
@@ -46,12 +46,16 @@ export async function viewTextKnit(part) {
     if ((L.seg ?? 0) !== i) return `<i class="ruler-dim" style="left:0;top:0;width:${w}px;height:${ht}px"></i>` + h;
     const t = v.n2p(0, L.top)[1];
     const b = v.n2p(0, L.bot)[1];
-    const pad = Math.max(4, (b - t) * 0.35); // 글자 아랫부분이 밑줄에 가리지 않게 넉넉히
+    const pad = Math.max(3, (b - t) * 0.3);
     const y1 = t - pad;
-    const y2 = b + pad + 5;
+    const y2 = b + pad;
+    // 글자 좌우 끝 (예전에 저장한 줄에는 없어서 그때는 영역 폭 전체)
+    const sg = segs[i].area;
+    const x1 = v.n2p(L.left ?? sg.x, 0)[0];
+    const x2 = v.n2p(L.right ?? sg.x + sg.w, 0)[0];
     return `<i class="ruler-dim" style="left:0;top:0;width:${w}px;height:${Math.max(0, y1)}px"></i>` +
       `<i class="ruler-dim" style="left:0;top:${y2}px;width:${w}px;height:${Math.max(0, ht - y2)}px"></i>` +
-      `<i class="ruler-line" style="left:0;top:${y1}px;width:${w}px;height:${y2 - y1}px"></i>` + h;
+      `<i class="ruler-line" style="left:${x1 - 2}px;top:${b + 2}px;width:${x2 - x1 + 4}px"></i>` + h;
   };
   // 단이 바뀌면 읽는 줄도 따라간다.
   //   1) 그 단에서 직접 탭해 둔 줄 (part.text.lineAt) — 반복으로 같은 단에 돌아왔을 때 같은 줄을 비추려고 기억한다
@@ -72,7 +76,7 @@ export async function viewTextKnit(part) {
       const k = at(i, l.top);
       const wrongSide = back ? k > ck + 0.001 : k < ck - 0.001;
       const d = (l.rowTo - l.row) * 1000 + (wrongSide ? 100 : 0) + Math.abs(k - ck);
-      if (d < bd) { bd = d; best = { seg: i, top: l.top, bot: l.bot }; }
+      if (d < bd) { bd = d; best = { seg: i, top: l.top, bot: l.bot, left: l.left, right: l.right }; }
     }));
     return best;
   };
@@ -130,7 +134,7 @@ export async function viewTextKnit(part) {
       if (!L) L = { top: ny - 0.008, bot: ny + 0.008 };
       const cur = p().line;
       const off = cur && (cur.seg ?? 0) === i && Math.abs(cur.top - L.top) < 0.002;
-      p().line = off ? null : { seg: i, top: L.top, bot: L.bot };
+      p().line = off ? null : { seg: i, top: L.top, bot: L.bot, left: L.left, right: L.right };
       // 이 단에서 읽는 줄로 기억한다 (반복으로 이 단에 다시 오면 이 줄로)
       const at = (part.text.lineAt ||= {});
       if (off) delete at[p().row]; else at[p().row] = { ...p().line };

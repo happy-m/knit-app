@@ -197,12 +197,13 @@ export async function readTextLines(page, area) {
       const [, b, , d, e, f] = it.transform;
       const h = Math.hypot(b, d) || it.height || 0;
       const [x1, y1] = vp.convertToViewportPoint(e, f);
-      const [, y2] = vp.convertToViewportPoint(e, f + h);
+      const [x2, y2] = vp.convertToViewportPoint(e + (it.width || 0), f + h);
       const top = Math.min(y1, y2) / vp.height;
       const bot = Math.max(y1, y2) / vp.height;
       const cx = x1 / vp.width;
       if (cx < area.x || cx > area.x + area.w || bot < area.y || top > area.y + area.h) continue;
-      boxes.push({ top, bot, c: (top + bot) / 2, bits: [[cx, it.str]] });
+      const right = Math.min(area.x + area.w, Math.max(x1, x2) / vp.width);
+      boxes.push({ top, bot, c: (top + bot) / 2, left: cx, right, bits: [[cx, it.str]] });
     }
     boxes.sort((p, q) => p.c - q.c);
     const lines = [];
@@ -211,6 +212,8 @@ export async function readTextLines(page, area) {
       if (L && Math.abs(bx.c - L.c) < (L.bot - L.top) * 0.5) {
         L.top = Math.min(L.top, bx.top);
         L.bot = Math.max(L.bot, bx.bot);
+        L.left = Math.min(L.left, bx.left);
+        L.right = Math.max(L.right, bx.right);
         L.bits.push(...bx.bits);
       } else lines.push({ ...bx });
     }
