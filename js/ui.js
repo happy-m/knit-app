@@ -8,7 +8,7 @@ const svg = (d, w = 20, sw = 2) =>
 export const icon = {
   back: svg('<path d="M15 5l-7 7 7 7"/>'),
   plus: svg('<path d="M12 5v14M5 12h14"/>', 18, 2.2),
-  undo: svg('<path d="M9 7L4 12l5 5"/><path d="M4 12h9a6 6 0 010 12h-1" transform="translate(0,-4)"/>', 18),
+  undo: svg('<path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 010 11H11"/>', 18),
   left: svg('<path d="M20 12H4M10 6l-6 6 6 6"/>', 18, 2.4),
   right: svg('<path d="M4 12h16M14 6l6 6-6 6"/>', 18, 2.4),
   check: svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 16, 2.6),
