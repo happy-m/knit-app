@@ -157,8 +157,6 @@ a { color: var(--ink); }
 /* 지금 단: 칸 안은 거의 비워 두고 위아래 바깥쪽에 선만 그어 기호를 가리지 않는다 */
 .band { background: rgba(255, 216, 107, 0.16); box-shadow: 0 -2.5px 0 #E8B400, 0 2.5px 0 #E8B400; }
 /* 글 설명: 읽는 줄 말고 나머지를 흐리게, 줄 아래에 형광펜 밑줄 */
-.cv-ov .ruler-dim { background: rgba(255, 255, 255, 0.55); }
-.cv-ov .ruler-line { height: 3px; border-radius: 2px; background: var(--teal); opacity: .85; }
 .shade { background: rgba(255, 255, 255, .62); }
 .mark { border: 3px solid var(--mark); border-radius: 4px; }
 .mark-tag { transform: translate(-50%, calc(-100% - 4px)); background: var(--mark); color: #fff; font-size: 13px; font-weight: 700;

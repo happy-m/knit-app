@@ -37,25 +37,16 @@ export async function viewTextKnit(part) {
     }
     return h;
   };
-  // 읽는 줄 강조: 위아래를 살짝 흐리게 덮고, 글자 아래에 글자 길이만큼 얇은 밑줄 (글자 위에는 아무것도 안 덮음)
+  // 읽는 줄 강조: 기호 차트의 지금 단과 같은 띠 (연한 노랑 + 위아래 선)
   const decorate = (i, v) => {
     const L = p().line;
     const h = sizeMarks(i, v) + ctl.pins.html(i, v.n2p);
-    if (!L) return h;
-    const [w, ht] = v.size();
-    if ((L.seg ?? 0) !== i) return `<i class="ruler-dim" style="left:0;top:0;width:${w}px;height:${ht}px"></i>` + h;
+    if (!L || (L.seg ?? 0) !== i) return h;
+    const [w] = v.size();
     const t = v.n2p(0, L.top)[1];
     const b = v.n2p(0, L.bot)[1];
     const pad = Math.max(3, (b - t) * 0.3);
-    const y1 = t - pad;
-    const y2 = b + pad;
-    // 글자 좌우 끝 (예전에 저장한 줄에는 없어서 그때는 영역 폭 전체)
-    const sg = segs[i].area;
-    const x1 = v.n2p(L.left ?? sg.x, 0)[0];
-    const x2 = v.n2p(L.right ?? sg.x + sg.w, 0)[0];
-    return `<i class="ruler-dim" style="left:0;top:0;width:${w}px;height:${Math.max(0, y1)}px"></i>` +
-      `<i class="ruler-dim" style="left:0;top:${y2}px;width:${w}px;height:${Math.max(0, ht - y2)}px"></i>` +
-      `<i class="ruler-line" style="left:${x1 - 2}px;top:${b + 2}px;width:${x2 - x1 + 4}px"></i>` + h;
+    return `<i class="band" style="left:0;top:${t - pad}px;width:${w}px;height:${b - t + pad * 2}px"></i>` + h;
   };
   // 단이 바뀌면 읽는 줄도 따라간다.
   //   1) 그 단에서 직접 탭해 둔 줄 (part.text.lineAt) — 반복으로 같은 단에 돌아왔을 때 같은 줄을 비추려고 기억한다
